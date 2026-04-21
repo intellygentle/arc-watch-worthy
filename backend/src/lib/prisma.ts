@@ -1,34 +1,5 @@
-// // backend/src/lib/prisma.ts
-
-// // ✅ Prisma 7: Import from generated path
-// import { PrismaClient } from '../generated/prisma/client';
-// // ✅ Import adapter packages
-// import { PrismaPg } from '@prisma/adapter-pg';
-// import { Pool } from 'pg';
-// import { env } from 'prisma/config';
-
-// // ✅ Create adapter instance for direct PostgreSQL connection
-// const pool = new Pool({ connectionString: env("DATABASE_URL") });
-// const adapter = new PrismaPg(pool);
-
-// const globalForPrisma = global as unknown as { prisma: PrismaClient };
-
-// // ✅ Pass adapter to PrismaClient constructor (NOT in prisma.config.ts)
-// export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-//   adapter, // ✅ Direct connection adapter
-//   log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-// });
-
-// if (process.env.NODE_ENV !== 'production') {
-//   globalForPrisma.prisma = prisma;
-// }
-
-// export default prisma;
-
-
 // backend/src/lib/prisma.ts
-
-import { PrismaClient } from '../generated/prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
