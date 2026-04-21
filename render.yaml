@@ -1,0 +1,48 @@
+# render.yaml
+services:
+  # Backend API (Free Web Service)
+  - type: web
+    name: arcstream-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arcstream-db
+          property: connectionString
+      - key: CIRCLE_API_KEY
+        sync: false
+      - key: CIRCLE_ENTITY_SECRET
+        sync: false
+      - key: ARC_RPC_URL
+        value: https://rpc.testnet.arc.network
+      - key: USDC_CONTRACT_ADDRESS
+        value: 0x3600000000000000000000000000000000000000
+      - key: X402_FACILITATOR_URL
+        value: https://facilitator.x402.org
+      - key: FRONTEND_URL
+        value: https://arcstream-frontend.onrender.com
+      - key: PORT
+        value: "10000"
+
+  # Frontend (Free Static Site)
+  - type: static
+    name: arcstream-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: .next
+    plan: free
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://arcstream-backend.onrender.com/api
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://arcstream-frontend.onrender.com
+
+databases:
+  - name: arcstream-db
+    plan: free
