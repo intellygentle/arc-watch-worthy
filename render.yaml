@@ -1,4 +1,4 @@
-# render.yaml
+# render.yaml - Fixed version for Render
 services:
   # Backend API (Free Web Service)
   - type: web
@@ -19,6 +19,8 @@ services:
         sync: false
       - key: CIRCLE_ENTITY_SECRET
         sync: false
+      - key: CIRCLE_USDC_TOKEN_ID
+        value: 3c90c3cc-0d44-4b50-8888-8dd25736052a
       - key: ARC_RPC_URL
         value: https://rpc.testnet.arc.network
       - key: USDC_CONTRACT_ADDRESS
@@ -30,18 +32,25 @@ services:
       - key: PORT
         value: "10000"
 
-  # Frontend (Free Static Site)
-  - type: static
+  # Frontend - as a web service (not static)
+  - type: web
     name: arcstream-frontend
+    runtime: node
     rootDir: frontend
     buildCommand: npm install && npm run build
-    staticPublishPath: .next
+    startCommand: npm start
     plan: free
     envVars:
       - key: NEXT_PUBLIC_API_URL
         value: https://arcstream-backend.onrender.com/api
       - key: NEXT_PUBLIC_APP_URL
         value: https://arcstream-frontend.onrender.com
+      - key: NEXT_PUBLIC_ARC_RPC_URL
+        value: https://rpc.testnet.arc.network
+      - key: NEXT_PUBLIC_USDC_CONTRACT
+        value: 0x3600000000000000000000000000000000000000
+      - key: NEXT_PUBLIC_X402_FACILITATOR
+        value: https://facilitator.x402.org
 
 databases:
   - name: arcstream-db
