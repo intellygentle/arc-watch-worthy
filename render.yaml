@@ -1,13 +1,14 @@
-# render.yaml - Fixed version for Render
+# render.yaml - Updated with correct build commands
 services:
-  # Backend API (Free Web Service)
+  # Backend API Service
   - type: web
     name: arcstream-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install && npx prisma generate && npm run build
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
     startCommand: npm start
     plan: free
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
@@ -32,7 +33,7 @@ services:
       - key: PORT
         value: "10000"
 
-  # Frontend - as a web service (not static)
+  # Frontend Service
   - type: web
     name: arcstream-frontend
     runtime: node
