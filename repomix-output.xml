@@ -40,7 +40,11 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+.gitignore
+backend/.env.example
+backend/.env.production
 backend/.gitignore
+backend/api/index.ts
 backend/package.json
 backend/prisma.config.ts
 backend/prisma/migrations/20260419024648_init_arcstream/migration.sql
@@ -71,6 +75,8 @@ backend/src/utils/transactionLogger.ts
 backend/src/utils/uuid.ts
 backend/test-siwe.ts
 backend/tsconfig.json
+backend/vercel.json
+frontend/.env.example
 frontend/.gitignore
 frontend/eslint.config.mjs
 frontend/next.config.ts
@@ -95,76 +101,35 @@ frontend/src/lib/api.ts
 frontend/tsc_output_2.txt
 frontend/tsc_output.txt
 frontend/tsconfig.json
+frontend/vercel.json
 project_snapshot.txt
+render.yaml
+vercel.json
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
 
-<file path="backend/.gitignore">
-node_modules
-# Keep environment variables out of version control
-.env
+<file path="backend/.env.example">
+# Database
+DATABASE_URL=postgresql://username:password@host:port/database
 
-/src/generated/prisma
-</file>
+# Circle API
+CIRCLE_API_KEY=your_circle_api_key_here
+CIRCLE_ENTITY_SECRET=your_circle_entity_secret_here
+CIRCLE_USDC_TOKEN_ID=3c90c3cc-0d44-4b50-8888-8dd25736052a
 
-<file path="backend/package.json">
-{
-  "name": "backend",
-  "version": "1.0.0",
-  "description": "ArcStream Backend - Nano Payments Video Platform",
-  "main": "dist/index.js",
-  "scripts": {
-    "dev": "nodemon --exec tsx src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "test": "echo No tests",
-    "migrate:data": "tsx scripts/migrate-json-to-prisma.ts"
-  },
-  "keywords": [
-    "arc",
-    "circle",
-    "nanopayments",
-    "x402",
-    "video"
-  ],
-  "author": "",
-  "license": "MIT",
-  "dependencies": {
-    "@circle-fin/developer-controlled-wallets": "^10.3.0",
-    "@circle-fin/x402-batching": "^2.1.0",
-    "@prisma/adapter-pg": "^7.7.0",
-    "@prisma/client": "^7.7.0",
-    "@x402/core": "^2.10.0",
-    "@x402/evm": "^2.10.0",
-    "@x402/express": "^2.10.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "ethers": "^6.13.0",
-    "express": "^5.2.1",
-    "helmet": "^8.1.0",
-    "p-limit": "^7.3.0",
-    "pg": "^8.20.0",
-    "prisma": "^7.7.0",
-    "siwe": "^2.3.2",
-    "uuid": "^14.0.0",
-    "viem": "^2.48.1",
-    "zod": "^3.25.76"
-  },
-  "type": "commonjs",
-  "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.6",
-    "@types/node": "^25.6.0",
-    "@types/p-limit": "^2.1.0",
-    "@types/pg": "^8.20.0",
-    "nodemon": "^3.1.0",
-    "ts-node": "^10.9.2",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
-  }
-}
+# Arc Network
+ARC_RPC_URL=https://rpc.testnet.arc.network
+USDC_CONTRACT_ADDRESS=0x3600000000000000000000000000000000000000
+
+# x402
+X402_FACILITATOR_URL=https://facilitator.x402.org
+
+# Frontend URL
+FRONTEND_URL=http://localhost:3000
+NODE_ENV=development
+PORT=3001
 </file>
 
 <file path="backend/prisma.config.ts">
@@ -297,188 +262,6 @@ CREATE INDEX "User_sessionSigner_idx" ON "User"("sessionSigner");
 provider = "postgresql"
 </file>
 
-<file path="backend/prisma/schema.prisma">
-// backend/prisma/schema.prisma
-
-generator client {
-  provider = "prisma-client-js"
-  output = "../src/generated/prisma"
-  engineType = "library"
-}
-
-datasource db {
-  provider = "postgresql"
-}
-
-model User {
-  id              String   @id @default(uuid())
-  eoaAddress      String   @unique 
-  dcwAddress      String   @unique 
-  circleWalletId  String?  
-  sessionSigner   String?  @unique 
-  
-  payments        Payment[]
-  videosCreated   Video[]
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([eoaAddress])
-  @@index([dcwAddress])
-  @@index([sessionSigner])
-}
-
-model Video {
-  id              String    @id @default(uuid())
-  title           String
-  description     String?
-  
-  hlsManifestUrl  String
-  hlsBaseUrl      String?
-  
-  // Pricing config
-  pricePerSession Decimal   @db.Decimal(10, 6)
-  sessionDuration Int       // ✅ Chunk duration in SECONDS (stores the actual seconds)
-  
-  durationSeconds Int
-  creatorAddress  String
-  creatorDcw      String
-  
-  payments        Payment[]
-  user            User?     @relation(fields: [creatorAddress], references: [eoaAddress])
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@index([creatorAddress])
-  @@index([createdAt, id])
-}
-
-model Payment {
-  id           String    @id @default(uuid())
-  
-  userId       String
-  videoId      String
-  sessionIndex Int
-  
-  txHash       String?
-  amount       Decimal   @db.Decimal(10, 6)
-  nonce        String?
-  
-  timestamp    DateTime  @default(now())
-  status       PaymentStatus @default(VERIFIED)
-  
-  user         User      @relation(fields: [userId], references: [id])
-  video        Video     @relation(fields: [videoId], references: [id])
-
-  @@unique([userId, videoId, sessionIndex])
-  @@index([userId, videoId, timestamp])
-  @@index([videoId, sessionIndex])
-}
-
-enum PaymentStatus {
-  PENDING
-  VERIFIED
-  FAILED
-  REFUNDED
-}
-</file>
-
-<file path="backend/scripts/migrate-json-to-prisma.ts">
-import { PrismaClient } from '../src/generated/prisma/client.js';
-import { PrismaPg } from '@prisma/adapter-pg';
-import pg from 'pg';
-import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// 1. Load Environment Variables
-dotenv.config();
-
-// 2. ESM __dirname Fix
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// 3. Initialize Prisma with the PostgreSQL Adapter (Required for v7)
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
-
-async function migrateUsers() {
-  const usersPath = path.resolve(__dirname, '../src/data/users.json');
-  
-  if (!fs.existsSync(usersPath)) {
-    console.log('⚠️ users.json not found, skipping...');
-    return;
-  }
-  
-  const users = JSON.parse(fs.readFileSync(usersPath, 'utf-8'));
-  console.log(`🔄 Migrating ${users.length} users...`);
-  
-  for (const user of users) {
-    try {
-      await prisma.user.upsert({
-        where: { eoaAddress: user.eoa },
-        update: {},
-        create: {
-          eoaAddress: user.eoa,
-          dcwAddress: user.dcwAddress,
-          circleWalletId: user.dcwWalletId || "",
-          createdAt: new Date(user.createdAt || Date.now()),
-        },
-      });
-      console.log(`✅ Migrated: ${user.eoa}`);
-    } catch (err: any) {
-      console.error(`❌ Error migrating user ${user.eoa}:`, err.message);
-    }
-  }
-}
-
-async function migrateVideos() {
-  const videosPath = path.resolve(__dirname, '../src/data/videos.json');
-  if (!fs.existsSync(videosPath)) return;
-
-  const videos = JSON.parse(fs.readFileSync(videosPath, 'utf-8'));
-  console.log(`🔄 Migrating ${videos.length} videos...`);
-
-  for (const v of videos) {
-    try {
-      await prisma.video.upsert({
-        where: { id: v.id },
-        update: {},
-        create: {
-          id: v.id,
-          title: v.title,
-          sessionDuration: v.pricingModel === 'per_5s' ? 5 : 60,
-          pricePerSession: v.pricePerChunk || 0.001,
-          creatorAddress: v.creatorWallet,
-          // Note: ensure these field names match your schema exactly
-        }
-      });
-      console.log(`✅ Migrated: ${v.title}`);
-    } catch (err: any) {
-      console.error(`❌ Error migrating video ${v.id}:`, err.message);
-    }
-  }
-}
-
-async function main() {
-  try {
-    await migrateUsers();
-    await migrateVideos();
-    console.log('🎉 Migration successful!');
-  } catch (err) {
-    console.error('💥 Global Migration Error:', err);
-  } finally {
-    await prisma.$disconnect();
-    await pool.end(); // Important to close the PG pool
-  }
-}
-
-main();
-</file>
-
 <file path="backend/src/config/circle.ts">
 // backend/src/config/circle.ts
 
@@ -518,46 +301,6 @@ export const circleConfig = {
 } as const;
 
 export default circleConfig;
-</file>
-
-<file path="backend/src/config/environment.ts">
-// backend/src/config/environment.ts
-
-import { z } from 'zod';
-
-const envSchema = z.object({
-  PORT: z.coerce.number().default(3001),
-  NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
-  CIRCLE_API_KEY: z.string().min(1),
-  CIRCLE_ENTITY_SECRET: z.string().min(1),
-  CIRCLE_USDC_TOKEN_ID: z.string().uuid().default('3c90c3cc-0d44-4b50-8888-8dd25736052a'), // ✅ Arc Testnet USDC
-  ARC_RPC_URL: z.string().url().default('https://rpc.testnet.arc.network'),
-  USDC_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-  X402_FACILITATOR_URL: z.string().url().default('https://facilitator.x402.org'),
-  FRONTEND_URL: z.string().url().default('http://localhost:3000'),
-  REDIS_URL: z.string().url().optional(),
-  ARC_CHAIN_ID: z.coerce.number().default(5042002),
-});
-
-export type EnvConfig = z.infer<typeof envSchema>;
-
-let validatedEnv: EnvConfig;
-
-export function getEnv(): EnvConfig {
-  if (!validatedEnv) {
-    try {
-      validatedEnv = envSchema.parse(process.env);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        console.error('❌ Invalid environment variables:');
-        error.errors.forEach((err) => console.error(`  - ${err.path.join('.')}: ${err.message}`));
-        process.exit(1);
-      }
-      throw error;
-    }
-  }
-  return validatedEnv;
-}
 </file>
 
 <file path="backend/src/controllers/walletController.ts">
@@ -661,180 +404,6 @@ module.exports = { createWallet, getBalance, getDepositInfo, validateSession };
 
 <file path="backend/src/data/videos.json">
 
-</file>
-
-<file path="backend/src/index.ts">
-// backend/src/index.ts
-
-import express, { Request, Response, NextFunction } from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import dotenv from 'dotenv';
-import { logTransaction, getTransactionStats } from './utils/transactionLogger';
-import { getEnv } from './config/environment';
-
-
-// Load and validate environment variables FIRST
-dotenv.config();
-const env = getEnv();
-
-const app = express();
-const PORT = env.PORT;
-
-// Middleware
-app.use(helmet({ 
-  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
-  crossOriginEmbedderPolicy: false 
-}));
-// backend/src/index.ts - Update CORS configuration
-
-app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001'],
-  credentials: true,
-  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Type'],
-}));
-
-// Add this middleware to set proper headers for video
-app.use('/api/videos/:id/stream', (req, res, next) => {
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-});
-
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// Request logging (production-ready)
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const start = Date.now();
-  res.on('finish', () => {
-    const duration = Date.now() - start;
-    console.log(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
-  });
-  next();
-});
-
-// Health check
-app.get('/api/health', (req: Request, res: Response) => {
-  res.json({ 
-    status: 'ok', 
-    service: 'arcstream-backend',
-    version: '1.0.0',
-    chain: 'ARC-TESTNET',
-    timestamp: new Date().toISOString(),
-    nodeEnv: env.NODE_ENV
-  });
-});
-
-// Routes with CommonJS interop (.default for ESM exports)
-app.use('/api/wallets', require('./routes/wallets'));
-app.use('/api/videos', require('./routes/videos'));
-app.use('/api/podcasts', require('./routes/podcasts'));
-app.use('/api/media', require('./routes/media').default);
-app.use('/api/auth', require('./routes/auth').default);
-// Payment logging middleware wrapper
-app.use((req: Request, res: Response, next: NextFunction) => {
-  const originalJson = res.json.bind(res);
-  
-  res.json = (data: any) => {
-    if ((req as any).x402Payment) {
-      logTransaction({
-        resource: (req as any).x402Payment.resource || req.url,
-        segment: (req as any).x402Payment.chunk || 0,
-        amount: (req as any).x402Payment.amount || '0',
-        payer: (req as any).x402Payment.payer,
-        recipient: (req as any).x402Payment.recipient,
-        nonce: (req as any).x402Payment.nonce,
-        chain: 'ARC-TESTNET'
-      });
-    }
-    return originalJson(data);
-  };
-  
-  next();
-});
-
-// ✅ FIXED: Stats endpoint with CORRECT JSON syntax (data: {...})
-app.get('/api/stats', (req: Request, res: Response) => {
-  const stats = getTransactionStats();
-  
-  res.json({
-    success: true,
-    data: {  // ✅ CORRECT: 'data:' key before the object
-      ...stats,
-      hackathonRequirement: {
-        minTransactions: 50,
-        met: stats.totalTransactions >= 50,
-        progress: `${Math.min(100, Math.round(stats.totalTransactions / 50 * 100))}%`
-      }
-    }
-  });
-});
-
-// 404 handler
-app.use((req: Request, res: Response) => {
-  res.status(404).json({ error: 'Endpoint not found', path: req.path });
-});
-
-// Global error handler (MUST be last)
-app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('Unhandled error:', err);
-  
-  const isProduction = env.NODE_ENV === 'production';
-  
-  res.status(err.status || 500).json({
-    error: isProduction ? 'Internal server error' : err.message,
-    ...(isProduction ? {} : { 
-      stack: err.stack,
-      path: req.path,
-      method: req.method
-    })
-  });
-});
-
-// Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🎬 ArcStream Backend`);
-  console.log(`   📡 Listening on http://0.0.0.0:${PORT}`);
-  console.log(`   🔗 API Base: /api`);
-  console.log(`   ⛓️  Chain: ARC-TESTNET`);
-  console.log(`   🌐 Frontend: ${env.FRONTEND_URL}`);
-  console.log(`   🔐 Env: ${env.NODE_ENV}`);
-});
-
-export default app;
-</file>
-
-<file path="backend/src/lib/prisma.ts">
-// backend/src/lib/prisma.ts
-
-// ✅ Prisma 7: Import from generated path
-import { PrismaClient } from '../generated/prisma/client';
-// ✅ Import adapter packages
-import { PrismaPg } from '@prisma/adapter-pg';
-import { Pool } from 'pg';
-import { env } from 'prisma/config';
-
-// ✅ Create adapter instance for direct PostgreSQL connection
-const pool = new Pool({ connectionString: env("DATABASE_URL") });
-const adapter = new PrismaPg(pool);
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-
-// ✅ Pass adapter to PrismaClient constructor (NOT in prisma.config.ts)
-export const prisma = globalForPrisma.prisma ?? new PrismaClient({
-  adapter, // ✅ Direct connection adapter
-  log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-});
-
-if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-}
-
-export default prisma;
 </file>
 
 <file path="backend/src/middleware/x402.ts">
@@ -1057,69 +626,6 @@ router.post('/link', async (req: Request, res: Response) => {
 export default router;
 </file>
 
-<file path="backend/src/routes/media.ts">
-// backend/src/routes/media.ts
-import express from 'express';
-import path from 'path';
-import fs from 'fs';
-
-const router = express.Router();
-
-// Serve local video files from a media directory
-router.get('/video/:filename', (req, res) => {
-  const filename = req.params.filename;
-  
-  // Set the path to your videos folder
-  const videosPath = process.env.VIDEOS_PATH || 'C:/Users/worko/Videos';
-  const videoPath = path.join(videosPath, filename);
-  
-  console.log(`📁 Serving video: ${videoPath}`);
-  
-  if (!fs.existsSync(videoPath)) {
-    console.error(`❌ Video not found: ${videoPath}`);
-    return res.status(404).json({ error: 'Video not found' });
-  }
-  
-  const stat = fs.statSync(videoPath);
-  const fileSize = stat.size;
-  const range = req.headers.range;
-  
-  // Get file extension for content type
-  const ext = path.extname(filename).toLowerCase();
-  const contentType = ext === '.mp4' ? 'video/mp4' : 
-                      ext === '.webm' ? 'video/webm' : 
-                      ext === '.mov' ? 'video/quicktime' : 
-                      'application/octet-stream';
-  
-  if (range) {
-    const parts = range.replace(/bytes=/, "").split("-");
-    const start = parseInt(parts[0], 10);
-    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-    const chunksize = (end - start) + 1;
-    
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': chunksize,
-      'Content-Type': contentType,
-      'Access-Control-Allow-Origin': '*',
-    });
-    
-    fs.createReadStream(videoPath, { start, end }).pipe(res);
-  } else {
-    res.writeHead(200, {
-      'Content-Length': fileSize,
-      'Content-Type': contentType,
-      'Accept-Ranges': 'bytes',
-      'Access-Control-Allow-Origin': '*',
-    });
-    fs.createReadStream(videoPath).pipe(res);
-  }
-});
-
-export default router;
-</file>
-
 <file path="backend/src/routes/podcasts.ts">
 import express from 'express';
 const pricing = require('../utils/pricing');
@@ -1235,721 +741,6 @@ router.get('/stats', (req, res) => {
 });
 
 // At bottom of file:
-module.exports = router;
-</file>
-
-<file path="backend/src/routes/videos.ts">
-// backend/src/routes/videos.ts
-
-import express, { Request, Response, NextFunction } from 'express';
-import { getAddress } from 'viem';
-import { createVideo, getAllVideos, getVideoById } from '../services/videoService';
-import { createX402Middleware, type X402Options } from '../middleware/x402';
-import { generateDemoTransactions } from '../services/nanopaymentsService';
-import { getTransactionStats } from '../utils/transactionLogger';
-import { prisma } from '../lib/prisma';
-import { Readable } from 'stream';
-import { signPaymentWithCircle } from '../services/nanopaymentsService';
-import fs from 'fs';
-import path from 'path';
-
-const router = express.Router();
-
-// 🔒 Production-safe parameter extractor
-const getRouteParam = (param: string | string[] | undefined): string | undefined => {
-  if (typeof param === 'string') return param;
-  if (Array.isArray(param) && param.length > 0) return param[0];
-  return undefined;
-};
-
-// 🔐 Auth middleware helper
-const getAuthenticatedUser = (req: Request) => {
-  const sessionUser = (req as any).session?.user;
-  if (sessionUser?.eoaAddress) return sessionUser;
-  
-  const authHeader = req.headers['authorization'];
-  if (authHeader?.startsWith('Bearer ')) {
-    const eoaAddress = authHeader.slice(7);
-    return { eoaAddress };
-  }
-  
-  return null;
-};
-
-// POST /api/videos - Create new video
-
-
-// router.post('/', async (req: Request, res: Response) => {
-//   try {
-//     const authenticatedUser = getAuthenticatedUser(req);
-//     if (!authenticatedUser?.eoaAddress) {
-//       return res.status(401).json({ error: 'Authentication required. Please connect your wallet first.' });
-//     }
-    
-//     const { title, description, durationSeconds, chunkDuration, pricePerChunk, videoUrl } = req.body;
-    
-//     if (!title || !durationSeconds || !videoUrl) {
-//       return res.status(400).json({ error: 'Missing required fields: title, durationSeconds, videoUrl' });
-//     }
-    
-//     // Validate chunk duration
-//     const chunkDur = parseInt(chunkDuration) || 5;
-//     if (chunkDur < 5) {
-//       return res.status(400).json({ error: 'Chunk duration must be at least 5 minutes' });
-//     }
-//     if (chunkDur > 60) {
-//       return res.status(400).json({ error: 'Chunk duration cannot exceed 60 minutes' });
-//     }
-    
-//     if (pricePerChunk && (pricePerChunk > 0.01 || pricePerChunk <= 0)) {
-//       return res.status(400).json({ error: 'pricePerChunk must be > 0 and ≤ 0.01' });
-//     }
-    
-//     const creator = await prisma.user.findUnique({
-//       where: { eoaAddress: authenticatedUser.eoaAddress }
-//     });
-    
-//     if (!creator) {
-//       return res.status(401).json({ error: 'User not found. Please reconnect your wallet.' });
-//     }
-    
-//     const video = await createVideo({ 
-//       title, 
-//       description, 
-//       durationSeconds: parseInt(durationSeconds, 10),
-//       chunkDuration: chunkDur,
-//       pricePerChunk: parseFloat(pricePerChunk) || 0.001, 
-//       creatorWallet: creator.eoaAddress,
-//       creatorDcw: creator.dcwAddress,
-//       videoUrl 
-//     });
-    
-//     res.status(201).json({ success: true, data: video });
-//   } catch (err: any) {
-//     console.error('Create video error:', err);
-//     res.status(500).json({ error: err.message || 'Failed to create video' });
-//   }
-// });
-
-// backend/src/routes/videos.ts - Update POST endpoint
-
-// POST /api/videos - Create new video
-router.post('/', async (req: Request, res: Response) => {
-  try {
-    const authenticatedUser = getAuthenticatedUser(req);
-    if (!authenticatedUser?.eoaAddress) {
-      return res.status(401).json({ error: 'Authentication required. Please connect your wallet first.' });
-    }
-    
-    const { 
-      title, 
-      description, 
-      durationSeconds, 
-      chunkUnit,        // ✅ 'seconds' or 'minutes'
-      chunkValue,       // ✅ number
-      pricePerChunk, 
-      videoUrl 
-    } = req.body;
-    
-    if (!title || !durationSeconds || !videoUrl) {
-      return res.status(400).json({ error: 'Missing required fields: title, durationSeconds, videoUrl' });
-    }
-    
-    // Calculate chunk duration in seconds
-    let chunkDurationSeconds: number;
-    const value = parseFloat(chunkValue) || 5;
-    
-    if (chunkUnit === 'minutes') {
-      chunkDurationSeconds = Math.round(value * 60);
-    } else {
-      chunkDurationSeconds = Math.round(value);
-    }
-    
-    // Validate
-    if (chunkDurationSeconds < 5) {
-      return res.status(400).json({ error: 'Chunk duration must be at least 5 seconds' });
-    }
-    if (chunkDurationSeconds > 3600) {
-      return res.status(400).json({ error: 'Chunk duration cannot exceed 60 minutes (3600 seconds)' });
-    }
-    if (chunkDurationSeconds > durationSeconds) {
-      return res.status(400).json({ error: 'Chunk duration cannot exceed video duration' });
-    }
-    
-    if (pricePerChunk && (pricePerChunk > 0.01 || pricePerChunk <= 0)) {
-      return res.status(400).json({ error: 'pricePerChunk must be > 0 and ≤ 0.01' });
-    }
-    
-    const creator = await prisma.user.findUnique({
-      where: { eoaAddress: authenticatedUser.eoaAddress }
-    });
-    
-    if (!creator) {
-      return res.status(401).json({ error: 'User not found. Please reconnect your wallet.' });
-    }
-    
-    const video = await createVideo({ 
-      title, 
-      description, 
-      durationSeconds: parseInt(durationSeconds, 10),
-      chunkDurationSeconds,
-      pricePerChunk: parseFloat(pricePerChunk) || 0.001, 
-      creatorWallet: creator.eoaAddress,
-      creatorDcw: creator.dcwAddress,
-      videoUrl 
-    });
-    
-    res.status(201).json({ success: true, data: video });
-  } catch (err: any) {
-    console.error('Create video error:', err);
-    res.status(500).json({ error: err.message || 'Failed to create video' });
-  }
-});
-
-
-// DELETE /api/videos/:id - Delete a video (only by creator)
-router.delete('/:id', async (req: Request, res: Response) => {
-  const videoId = getRouteParam(req.params.id);
-  if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
-  
-  // Get authenticated user
-  const authenticatedUser = getAuthenticatedUser(req);
-  if (!authenticatedUser?.eoaAddress) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  
-  try {
-    // Find the video
-    const video = await prisma.video.findUnique({
-      where: { id: videoId },
-      include: { payments: true }
-    });
-    
-    if (!video) {
-      return res.status(404).json({ error: 'Video not found' });
-    }
-    
-    // Check if the authenticated user is the creator
-    if (video.creatorAddress.toLowerCase() !== authenticatedUser.eoaAddress.toLowerCase()) {
-      return res.status(403).json({ error: 'You are not the creator of this video' });
-    }
-    
-    // Delete all payments associated with this video
-    const deletedPayments = await prisma.payment.deleteMany({
-      where: { videoId: videoId }
-    });
-    
-    console.log(`🗑️ Deleted ${deletedPayments.count} payments for video ${videoId}`);
-    
-    // Delete the video record
-    await prisma.video.delete({
-      where: { id: videoId }
-    });
-    
-    // Optional: Delete the local video file if it exists
-    const videoUrl = video.hlsManifestUrl;
-    const isLocalFile = videoUrl.includes(':\\') || 
-                        videoUrl.includes('\\\\') || 
-                        videoUrl.startsWith('/') ||
-                        (!videoUrl.startsWith('http://') && !videoUrl.startsWith('https://'));
-    
-    if (isLocalFile) {
-      try {
-        let normalizedPath = videoUrl.replace(/\\/g, '/');
-        if (fs.existsSync(normalizedPath)) {
-          fs.unlinkSync(normalizedPath);
-          console.log(`🗑️ Deleted local video file: ${normalizedPath}`);
-        }
-      } catch (fileErr) {
-        console.warn('Could not delete local file:', fileErr);
-      }
-    }
-    
-    res.json({
-      success: true,
-      data: {
-        videoId,
-        paymentsDeleted: deletedPayments.count,
-        message: 'Video deleted successfully'
-      }
-    });
-    
-  } catch (err: any) {
-    console.error('Delete video error:', err);
-    res.status(500).json({ error: err.message || 'Failed to delete video' });
-  }
-});
-
-
-
-// GET /api/videos - Feed
-router.get('/', async (req: Request, res: Response) => {
-  let videos = await getAllVideos();
-  const { q } = req.query;
-  
-  if (q && typeof q === 'string') {
-    const search = q.toLowerCase();
-    videos = videos.filter(v => 
-      v.title.toLowerCase().includes(search) || 
-      v.id.toLowerCase().includes(search) ||
-      v.description?.toLowerCase().includes(search)
-    );
-  }
-  
-  res.json({ success: true, data: videos, count: videos.length });
-});
-
-// GET /api/videos/:id - Single video
-router.get('/:id', async (req: Request, res: Response) => {
-  const videoId = getRouteParam(req.params.id);
-  if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
-  
-  const video = await getVideoById(videoId);
-  if (!video) return res.status(404).json({ error: 'Video not found' });
-  
-  res.json({ success: true, data: video });
-});
-
-// GET /api/videos/:id/stream - Stream video with range support
-router.get('/:id/stream', async (req: Request, res: Response) => {
-  const videoId = getRouteParam(req.params.id);
-  if (!videoId) {
-    console.error('❌ Missing video ID');
-    return res.status(400).json({ error: 'Missing video ID' });
-  }
-  
-  const video = await getVideoById(videoId);
-  if (!video) {
-    console.error(`❌ Video not found: ${videoId}`);
-    return res.status(404).json({ error: 'Video not found' });
-  }
-  
-  const videoUrl = video.videoUrl;
-  
-  console.log(`📹 [STREAM] Video ID: ${videoId}`);
-  console.log(`📹 [STREAM] Video URL: ${videoUrl}`);
-  
-  const getContentType = (filePath: string): string => {
-    const ext = path.extname(filePath).toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      '.mp4': 'video/mp4',
-      '.webm': 'video/webm',
-      '.ogg': 'video/ogg',
-      '.mov': 'video/quicktime',
-      '.avi': 'video/x-msvideo',
-      '.mkv': 'video/x-matroska',
-      '.m3u8': 'application/vnd.apple.mpegurl',
-      '.ts': 'video/MP2T',
-    };
-    return mimeTypes[ext] || 'video/mp4';
-  };
-  
-  const isLocalFile = videoUrl.includes(':\\') || 
-                      videoUrl.includes('\\\\') || 
-                      videoUrl.startsWith('/') ||
-                      (!videoUrl.startsWith('http://') && !videoUrl.startsWith('https://'));
-  
-  console.log(`📹 [STREAM] Is local file: ${isLocalFile}`);
-  
-  if (isLocalFile) {
-    try {
-      let normalizedPath = videoUrl.replace(/\\/g, '/');
-      
-      console.log(`📹 [STREAM] Normalized path: ${normalizedPath}`);
-      console.log(`📹 [STREAM] File exists: ${fs.existsSync(normalizedPath)}`);
-      
-      if (!fs.existsSync(normalizedPath)) {
-        console.error(`❌ File not found: ${normalizedPath}`);
-        
-        const alternatives = [
-          normalizedPath,
-          `C:/Users/${process.env.USERNAME || 'worko'}/Videos/${path.basename(normalizedPath)}`,
-          `./${path.basename(normalizedPath)}`,
-          path.join(process.cwd(), path.basename(normalizedPath)),
-        ];
-        
-        let foundPath: string | null = null;
-        for (const alt of alternatives) {
-          if (fs.existsSync(alt)) {
-            foundPath = alt;
-            console.log(`✅ Found at alternative path: ${alt}`);
-            break;
-          }
-        }
-        
-        if (!foundPath) {
-          return res.status(404).json({ 
-            error: 'Video file not found', 
-            path: normalizedPath,
-            alternatives: alternatives.filter(a => a !== normalizedPath),
-            exists: false 
-          });
-        }
-        
-        normalizedPath = foundPath;
-      }
-      
-      const stat = fs.statSync(normalizedPath);
-      const fileSize = stat.size;
-      const range = req.headers.range;
-      const contentType = getContentType(normalizedPath);
-      
-      console.log(`📹 [STREAM] File size: ${fileSize}, Type: ${contentType}`);
-      console.log(`📹 [STREAM] Range header: ${range || 'none'}`);
-      
-      if (range) {
-        const parts = range.replace(/bytes=/, "").split("-");
-        const start = parseInt(parts[0], 10);
-        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
-        const chunksize = (end - start) + 1;
-        
-        console.log(`📹 [STREAM] Range: ${start}-${end}/${fileSize}`);
-        
-        res.writeHead(206, {
-          'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-          'Accept-Ranges': 'bytes',
-          'Content-Length': chunksize,
-          'Content-Type': contentType,
-          'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'public, max-age=3600',
-        });
-        
-        const stream = fs.createReadStream(normalizedPath, { start, end });
-        stream.on('error', (err) => {
-          console.error('❌ Stream error:', err);
-          if (!res.headersSent) {
-            res.status(500).json({ error: 'Stream error' });
-          }
-        });
-        stream.on('open', () => console.log(`📹 [STREAM] Stream opened for range`));
-        stream.pipe(res);
-      } else {
-        res.writeHead(200, {
-          'Content-Length': fileSize,
-          'Content-Type': contentType,
-          'Accept-Ranges': 'bytes',
-          'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'public, max-age=3600',
-        });
-        const stream = fs.createReadStream(normalizedPath);
-        stream.on('error', (err) => {
-          console.error('❌ Stream error:', err);
-          if (!res.headersSent) {
-            res.status(500).json({ error: 'Stream error' });
-          }
-        });
-        stream.on('open', () => console.log(`📹 [STREAM] Full stream opened`));
-        stream.pipe(res);
-      }
-    } catch (err: any) {
-      console.error('❌ Local file stream error:', err);
-      res.status(500).json({ error: 'Failed to stream local file', details: err.message });
-    }
-  } else {
-    try {
-      console.log(`🌐 [STREAM] Proxying remote URL: ${videoUrl}`);
-      
-      const fetchOptions: RequestInit = {};
-      if (req.headers.range) {
-        fetchOptions.headers = { Range: req.headers.range };
-      }
-      
-      const response = await fetch(videoUrl, fetchOptions);
-      
-      console.log(`🌐 [STREAM] Remote response: ${response.status}`);
-      
-      if (response.status === 206 || response.status === 200) {
-        res.status(response.status);
-        
-        response.headers.forEach((value, key) => {
-          const lowerKey = key.toLowerCase();
-          if (!lowerKey.startsWith('content-encoding') && 
-              !lowerKey.startsWith('transfer-encoding')) {
-            res.setHeader(key, value);
-          }
-        });
-        
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        
-        if (response.body) {
-          Readable.from(response.body as any).pipe(res);
-        } else {
-          res.end();
-        }
-      } else {
-        res.status(response.status).json({ error: 'Failed to fetch remote video' });
-      }
-    } catch (err: any) {
-      console.error('❌ Remote proxy error:', err);
-      res.status(502).json({ error: 'Failed to proxy remote video', details: err.message });
-    }
-  }
-});
-
-// GET /api/videos/debug/:id - Debug endpoint
-router.get('/debug/:id', async (req: Request, res: Response) => {
-  const videoId = getRouteParam(req.params.id);
-  if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
-  
-  const video = await getVideoById(videoId);
-  if (!video) return res.status(404).json({ error: 'Video not found' });
-  
-  const videoUrl = video.videoUrl;
-  
-  const isLocalFile = videoUrl.includes(':\\') || 
-                      videoUrl.includes('\\\\') || 
-                      videoUrl.startsWith('/') ||
-                      (!videoUrl.startsWith('http://') && !videoUrl.startsWith('https://'));
-  
-  const debugInfo: any = {
-    videoId,
-    videoUrl,
-    isLocalFile,
-    title: video.title,
-    durationSeconds: video.durationSeconds,
-  };
-  
-  if (isLocalFile) {
-    let normalizedPath = videoUrl.replace(/\\/g, '/');
-    
-    debugInfo.normalizedPath = normalizedPath;
-    debugInfo.exists = fs.existsSync(normalizedPath);
-    debugInfo.cwd = process.cwd();
-    
-    const alternatives = [
-      normalizedPath,
-      `C:/Users/${process.env.USERNAME || 'worko'}/Videos/${path.basename(normalizedPath)}`,
-      path.join(process.cwd(), path.basename(normalizedPath)),
-    ];
-    
-    debugInfo.alternatives = [];
-    for (const alt of alternatives) {
-      if (alt !== normalizedPath) {
-        debugInfo.alternatives.push({
-          path: alt,
-          exists: fs.existsSync(alt)
-        });
-      }
-    }
-    
-    if (debugInfo.exists) {
-      const stat = fs.statSync(normalizedPath);
-      debugInfo.fileSize = stat.size;
-      debugInfo.fileSizeMB = (stat.size / (1024 * 1024)).toFixed(2);
-      debugInfo.isFile = stat.isFile();
-      debugInfo.dirname = path.dirname(normalizedPath);
-      debugInfo.basename = path.basename(normalizedPath);
-      debugInfo.extname = path.extname(normalizedPath);
-      debugInfo.streamUrl = `http://localhost:3001/api/videos/${videoId}/stream`;
-    }
-  } else {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const response = await fetch(videoUrl, { 
-        method: 'HEAD',
-        signal: controller.signal 
-      });
-      clearTimeout(timeoutId);
-      
-      debugInfo.remoteStatus = response.status;
-      debugInfo.remoteOk = response.ok;
-      debugInfo.contentType = response.headers.get('content-type');
-      debugInfo.contentLength = response.headers.get('content-length');
-    } catch (err: any) {
-      debugInfo.remoteError = err.message;
-    }
-  }
-  
-  res.json({ success: true, data: debugInfo });
-});
-
-// POST /api/videos/:id/sign/:chunk
-router.post('/:id/sign/:chunk', async (req: Request, res: Response) => {
-  const videoId = getRouteParam(req.params.id);
-  const chunkStr = getRouteParam(req.params.chunk);
-  
-  if (!videoId || !chunkStr) {
-    return res.status(400).json({ error: 'Missing video ID or chunk index' });
-  }
-  
-  const chunkIndex = parseInt(chunkStr, 10);
-  if (isNaN(chunkIndex)) {
-    return res.status(400).json({ error: 'Invalid chunk index' });
-  }
-  
-  const authenticatedUser = getAuthenticatedUser(req);
-  if (!authenticatedUser?.eoaAddress) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  
-  const video = await getVideoById(videoId);
-  if (!video) {
-    return res.status(404).json({ error: 'Video not found' });
-  }
-  
-  const user = await prisma.user.findUnique({
-    where: { eoaAddress: authenticatedUser.eoaAddress }
-  });
-  
-  if (!user?.circleWalletId) {
-    return res.status(400).json({ error: 'Circle wallet not found' });
-  }
-  
-  try {
-    const { signature, nonce, message } = await signPaymentWithCircle({
-      walletId: user.circleWalletId,
-      videoId,
-      chunkIndex,
-      priceUSD: video.pricePerChunk.toFixed(6)
-    });
-    
-    res.json({
-      success: true,
-      data: { signature, nonce, message, dcwAddress: user.dcwAddress, price: video.pricePerChunk.toFixed(6) }
-    });
-  } catch (err: any) {
-    console.error('Sign payment error:', err);
-    res.status(500).json({ error: 'Failed to sign payment', details: err.message });
-  }
-});
-
-// GET /api/videos/:id/paid-chunks - Get chunks user has already paid for
-router.get('/:id/paid-chunks', async (req: Request, res: Response) => {
-  const videoId = getRouteParam(req.params.id);
-  if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
-  
-  const authHeader = req.headers['authorization'];
-  if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  
-  const eoaAddress = authHeader.slice(7);
-  
-  try {
-    const user = await prisma.user.findUnique({
-      where: { eoaAddress: getAddress(eoaAddress) }
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const payments = await prisma.payment.findMany({
-      where: {
-        userId: user.id,
-        videoId: videoId,
-        status: 'VERIFIED',
-      },
-      select: {
-        sessionIndex: true,
-        amount: true,
-        timestamp: true,
-      },
-      orderBy: {
-        sessionIndex: 'asc',
-      }
-    });
-    
-    const paidChunks = payments.map(p => p.sessionIndex);
-    
-    res.json({
-      success: true,
-      data: {
-        videoId,
-        userId: user.id,
-        eoaAddress: user.eoaAddress,
-        paidChunks,
-        payments: payments.map(p => ({
-          chunk: p.sessionIndex,
-          amount: p.amount.toString(),
-          paidAt: p.timestamp,
-        })),
-        totalPaid: payments.reduce((sum, p) => sum + Number(p.amount), 0),
-      }
-    });
-  } catch (err: any) {
-    console.error('Get paid chunks error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// POST /api/videos/:id/stream/:chunk - Protected endpoint
-router.post('/:id/stream/:chunk', 
-  async (req: Request, res: Response, next: NextFunction) => {
-    const videoId = getRouteParam(req.params.id);
-    const chunkStr = getRouteParam(req.params.chunk);
-    
-    if (!videoId || !chunkStr) return res.status(400).json({ error: 'Missing video ID or chunk index' });
-    const chunkIndex = parseInt(chunkStr, 10);
-    if (isNaN(chunkIndex)) return res.status(400).json({ error: 'Invalid chunk index' });
-    
-    const video = await getVideoById(videoId);
-    if (!video) return res.status(404).json({ error: 'Video not found' });
-    
-    const middlewareOptions: X402Options = {
-      videoId,
-      chunkIndex,
-      priceUSD: video.pricePerChunk.toFixed(6),
-      creatorDcw: video.creatorDcw,
-      creatorAddress: video.creatorWallet,
-    };
-    
-    return createX402Middleware(middlewareOptions)(req, res, next);
-  },
-  async (req: Request, res: Response) => {
-    const videoId = getRouteParam(req.params.id) || '';
-    const chunkStr = getRouteParam(req.params.chunk) || '';
-    const chunkIndex = parseInt(chunkStr, 10);
-    
-    const video = await getVideoById(videoId);
-    if (!video) return res.status(404).json({ error: 'Video not found' });
-    
-    res.json({
-      success: true,
-      data: {
-        videoId,
-        chunk: chunkIndex,
-        unlocked: true,
-        streamUrl: `/api/videos/${videoId}/stream`,
-        payment: (req as any).x402Payment
-      },
-      message: 'Chunk unlocked'
-    });
-  }
-);
-
-// POST /api/videos/:id/demo-payments
-router.post('/:id/demo-payments', async (req: Request, res: Response) => {
-  const videoId = getRouteParam(req.params.id);
-  if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
-  
-  const { count = 50 } = req.body;
-  const video = await getVideoById(videoId);
-  if (!video) return res.status(404).json({ error: 'Video not found' });
-  
-  const result = await generateDemoTransactions(videoId, video.creatorDcw, parseInt(count, 10));
-  res.json({ success: true, data: result });
-});
-
-// GET /api/videos/stats - Transaction analytics
-router.get('/stats', (req: Request, res: Response) => {
-  const stats = getTransactionStats();
-  
-  res.json({
-    success: true,
-    data: {
-      ...stats,
-      hackathonRequirement: {
-        minTransactions: 50,
-        met: stats.totalTransactions >= 50,
-        progress: `${Math.min(100, Math.round(stats.totalTransactions / 50 * 100))}%`
-      }
-    }
-  });
-});
-
 module.exports = router;
 </file>
 
@@ -2673,564 +1464,6 @@ export async function getVideoById(id: string): Promise<Video | undefined> {
 }
 </file>
 
-<file path="backend/src/services/walletService.ts">
-// backend/src/services/walletService.ts
-
-import { initiateDeveloperControlledWalletsClient } from '@circle-fin/developer-controlled-wallets';
-import { circleConfig, arcTestnet } from '../config/circle';
-import { createPublicClient, http, formatUnits, type Address, getAddress } from 'viem';
-import { z } from 'zod';
-
-const USDC_ABI = [
-  {
-    name: 'balanceOf',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'account', type: 'address' }],
-    outputs: [{ name: 'balance', type: 'uint256' }],
-  },
-] as const;
-
-const walletSchema = z.object({
-  userId: z.string().min(3).max(50),
-  userEmail: z.string().email(),
-});
-
-// ✅ Type for JSON-RPC response
-interface RpcResponse {
-  jsonrpc: string;
-  id: number;
-  result?: string;
-  error?: {
-    code: number;
-    message: string;
-  };
-}
-
-let walletsClient: ReturnType<typeof initiateDeveloperControlledWalletsClient> | null = null;
-
-function getWalletsClient() {
-  if (!circleConfig.apiKey || !circleConfig.entitySecret) {
-    throw new Error('Circle Configuration Missing');
-  }
-  if (!walletsClient) {
-    walletsClient = initiateDeveloperControlledWalletsClient({
-      apiKey: circleConfig.apiKey,
-      entitySecret: circleConfig.entitySecret,
-    });
-  }
-  return walletsClient;
-}
-
-export { getWalletsClient };
-
-const arcClient = createPublicClient({
-  chain: arcTestnet,
-  transport: http(circleConfig.rpcUrl, {
-    batch: { batchSize: 10 },
-    retryCount: 3,
-    retryDelay: 1000,
-  }),
-});
-
-export async function createUserWallet(userId: string, userEmail: string) {
-  const validated = walletSchema.parse({ userId, userEmail });
-  const client = getWalletsClient();
-
-  const walletSetRes = await client.createWalletSet({
-    name: `ArcStream-${validated.userId.slice(0, 20)}`,
-  });
-  const walletSetId = walletSetRes.data?.walletSet?.id;
-  if (!walletSetId) throw new Error('Failed to create wallet set');
-
-  const walletsRes = await client.createWallets({
-    blockchains: ['ARC-TESTNET'],
-    count: 1,
-    walletSetId,
-    accountType: 'SCA',
-  });
-  
-  const wallet = walletsRes.data?.wallets?.[0];
-  if (!wallet?.address || !wallet?.id) throw new Error('Failed to create wallet');
-
-  return {
-    success: true,
-    walletAddress: wallet.address,
-    walletId: wallet.id,
-    walletSetId,
-    chain: 'ARC-TESTNET',
-  };
-}
-
-export function getDepositAddress(walletAddress: string) {
-  if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-    throw new Error('Invalid wallet address format');
-  }
-  return {
-    address: walletAddress,
-    chain: 'ARC-TESTNET',
-    chainId: arcTestnet.id,
-    token: 'USDC',
-    contractAddress: circleConfig.usdcContractAddress,
-    faucetUrl: 'https://faucet.circle.com',
-    // ✅ CORRECTED EXPLORER URL
-    explorerUrl: `https://testnet.arcscan.app/address/${walletAddress}`,
-  };
-}
-
-export async function getUSDCBalance(walletAddress: string) {
-  if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-    throw new Error('Invalid wallet address format');
-  }
-
-  try {
-    const balance = await arcClient.readContract({
-      address: circleConfig.usdcContractAddress as Address,
-      abi: USDC_ABI,
-      functionName: 'balanceOf',
-      args: [walletAddress as Address],
-    });
-
-    return {
-      success: true,
-      walletAddress,
-      balanceUSDC: formatUnits(balance as bigint, 6),
-      balanceRaw: (balance as bigint).toString(),
-      currency: 'USDC',
-      chain: 'ARC-TESTNET',
-      contractAddress: circleConfig.usdcContractAddress,
-      source: 'arc-rpc',
-      timestamp: new Date().toISOString(),
-    };
-  } catch (rpcErr: any) {
-    console.error('RPC balance query failed:', rpcErr?.message || rpcErr);
-    return {
-      success: false,
-      error: 'Failed to fetch USDC balance from Arc RPC',
-      walletAddress,
-    };
-  }
-}
-
-export async function getCircleWalletState(walletId: string) {
-  const response = await fetch(`https://api.circle.com/v1/w3s/wallets/${walletId}`, {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${circleConfig.apiKey}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Failed to fetch wallet state: ${response.status} ${errorText}`);
-  }
-
-  const result: any = await response.json();
-  return result.data?.wallet;
-}
-
-/**
- * ✅ IMPROVED: Check on-chain bytecode with multiple methods
- */
-export async function isWalletDeployedOnChain(walletAddress: string): Promise<boolean> {
-  try {
-    // Method 1: viem getBytecode
-    const code = await arcClient.getBytecode({ 
-      address: getAddress(walletAddress) 
-    });
-    
-    if (code && code !== '0x' && code !== '0x0') {
-      console.log(`✅ Bytecode detected via viem: ${code.slice(0, 30)}...`);
-      return true;
-    }
-    
-    // Method 2: Direct RPC call (fallback)
-    const response = await fetch(circleConfig.rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_getCode',
-        params: [walletAddress, 'latest'],
-        id: 1
-      })
-    });
-    
-    const result = await response.json() as RpcResponse;
-    const rpcCode = result.result;
-    
-    if (rpcCode && rpcCode !== '0x' && rpcCode !== '0x0') {
-      console.log(`✅ Bytecode detected via RPC: ${rpcCode.slice(0, 30)}...`);
-      return true;
-    }
-    
-    return false;
-  } catch (err: any) {
-    console.error('isWalletDeployedOnChain error:', err.message);
-    return false;
-  }
-}
-
-/**
- * 🔍 Diagnostic: Check bytecode with detailed logging
- */
-export async function diagnoseWalletDeployment(walletAddress: string) {
-  console.log(`\n🔍 DIAGNOSING WALLET: ${walletAddress}`);
-  console.log('='.repeat(60));
-  
-  // Method 1: viem getBytecode
-  try {
-    const code = await arcClient.getBytecode({ 
-      address: getAddress(walletAddress) 
-    });
-    console.log(`   Viem getBytecode result: "${code}"`);
-    console.log(`   Length: ${code?.length || 0} characters`);
-    console.log(`   Deployed: ${!!code && code !== '0x' && code !== '0x0'}`);
-  } catch (err: any) {
-    console.log(`   Viem getBytecode error: ${err.message}`);
-  }
-  
-  // Method 2: Direct RPC call
-  try {
-    const response = await fetch(circleConfig.rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'eth_getCode',
-        params: [walletAddress, 'latest'],
-        id: 1
-      })
-    });
-    
-    const result = await response.json() as RpcResponse;
-    console.log(`   Direct RPC eth_getCode result: "${result.result}"`);
-    console.log(`   Length: ${result.result?.length || 0} characters`);
-  } catch (err: any) {
-    console.log(`   Direct RPC error: ${err.message}`);
-  }
-  
-  // Method 3: Check balance
-  try {
-    const balance = await getUSDCBalance(walletAddress);
-    console.log(`   Balance: ${balance.success ? balance.balanceUSDC + ' USDC' : 'Failed to fetch'}`);
-  } catch (err: any) {
-    console.log(`   Balance check error: ${err.message}`);
-  }
-  
-  // Method 4: Check explorer URL
-  // ✅ CORRECTED EXPLORER URL
-  console.log(`   Explorer: https://testnet.arcscan.app/address/${walletAddress}`);
-  console.log('='.repeat(60));
-}
-
-/**
- * ✅ WORKING: Deploy SCA wallet using contractExecution with zero-value self-transfer
- * Based on YieldPool's proven deployment flow
- */
-export async function deployCircleWallet(walletId: string, walletAddress: string) {
-  const client = getWalletsClient();
-  
-  console.log(`\n🚀 ACTIVATING SCA WALLET`);
-  console.log('='.repeat(60));
-  console.log(`   Wallet ID: ${walletId}`);
-  console.log(`   Address: ${walletAddress}`);
-  
-  // 1. Check if already deployed
-  const alreadyDeployed = await isWalletDeployedOnChain(walletAddress);
-  if (alreadyDeployed) {
-    console.log(`✅ Wallet already deployed on-chain.`);
-    console.log('='.repeat(60));
-    return {
-      success: true,
-      txId: 'already-deployed',
-      txHash: undefined,
-      onChainDeployed: true,
-      message: 'Wallet already deployed on-chain'
-    };
-  }
-
-  // 2. Check Circle wallet state
-  try {
-    const walletState = await getCircleWalletState(walletId);
-    console.log(`   Circle state: ${walletState?.state}`);
-    console.log(`   Circle isDeployed: ${walletState?.isDeployed}`);
-  } catch (err: any) {
-    console.log(`   Could not fetch Circle state: ${err.message}`);
-  }
-
-  // 3. Check balance
-  const balanceCheck = await getUSDCBalance(walletAddress);
-  const balance = balanceCheck.success ? parseFloat(balanceCheck.balanceUSDC || '0') : 0;
-  console.log(`   Current balance: ${balance} USDC`);
-
-  // 4. Trigger lazy deployment via contract execution
-  console.log(`\n📤 Initiating activation via contractExecution (0 USDC self-transfer)...`);
-  
-  let response;
-  try {
-response = await client.createContractExecutionTransaction({
-  walletId: walletId,
-  blockchain: 'ARC-TESTNET',
-  contractAddress: circleConfig.usdcContractAddress,
-  abiFunctionSignature: 'transfer(address,uint256)',
-  abiParameters: [walletAddress, '0'], // ✅ '0' as integer string is correct for 0 amount
-  fee: {
-    type: 'level',
-    config: { feeLevel: 'MEDIUM' }
-  },
-    } as any);
-  } catch (err: any) {
-    console.error('❌ Contract execution error:', err.message);
-    
-    if (err.message.includes('not yet deployed') || err.message.includes('insufficient')) {
-      throw new Error(
-        `Wallet needs funding before activation. Current balance: ${balance} USDC. ` +
-        `Please fund the wallet with at least 0.001 USDC for gas fees.`
-      );
-    }
-    throw err;
-  }
-
-  const txId = response.data?.id;
-  if (!txId) {
-    throw new Error('SDK returned no transaction ID');
-  }
-  
-  console.log(`   Activation TX ID: ${txId}`);
-
-  // 5. Poll for Circle transaction completion AND get transaction hash
-  let txHash: string | null = null;
-  let txComplete = false;
-  
-  console.log(`\n⏳ Waiting for Circle confirmation...`);
-  
-  for (let i = 0; i < 60; i++) {
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
-    try {
-      const txStatus = await client.getTransaction({ id: txId });
-      const state = txStatus.data?.transaction?.state;
-      txHash = txStatus.data?.transaction?.txHash || txHash;
-      
-      if (i % 3 === 0 || state === 'COMPLETE') {
-        console.log(`   State: ${state} ${txHash ? `| Hash: ${txHash.slice(0, 15)}...` : ''} (${i * 5}s)`);
-      }
-      
-      if (state === 'COMPLETE' || state === 'CONFIRMED') {
-        txComplete = true;
-        console.log(`✅ Circle transaction confirmed!`);
-        break;
-      }
-      
-      if (state === 'FAILED') {
-        const errorReason = txStatus.data?.transaction?.errorReason || 'Unknown error';
-        throw new Error(`Transaction failed: ${errorReason}`);
-      }
-    } catch (pollErr: any) {
-      console.log(`   Poll error: ${pollErr.message}`);
-    }
-  }
-
-  if (!txComplete) {
-    console.warn(`⚠️ Transaction confirmation timed out.`);
-  }
-
-  // 6. If we have a transaction hash, wait for it to be mined
-  if (txHash) {
-    console.log(`\n⏳ Waiting for transaction to be mined...`);
-    console.log(`   TX Hash: ${txHash}`);
-    // ✅ CORRECTED EXPLORER URL
-    console.log(`   Explorer: https://testnet.arcscan.app/tx/${txHash}`);
-    
-    let receiptFound = false;
-    
-    for (let i = 0; i < 30; i++) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      try {
-        const receipt = await arcClient.getTransactionReceipt({ 
-          hash: txHash as `0x${string}` 
-        });
-        
-        if (receipt) {
-          console.log(`✅ Transaction mined!`);
-          console.log(`   Block: ${receipt.blockNumber}`);
-          console.log(`   Status: ${receipt.status === 'success' ? 'SUCCESS' : 'FAILED'}`);
-          console.log(`   Gas used: ${receipt.gasUsed}`);
-          
-          if (receipt.contractAddress) {
-            console.log(`   Contract deployed at: ${receipt.contractAddress}`);
-          }
-          
-          receiptFound = true;
-          break;
-        }
-      } catch (err) {
-        // Receipt not available yet
-      }
-      
-      if (i % 5 === 0 && i > 0) {
-        console.log(`   Waiting for receipt... (${i * 2}s)`);
-      }
-    }
-    
-    if (!receiptFound) {
-      console.log(`   ⚠️ Receipt not found. Transaction may still be pending.`);
-    }
-  }
-
-  // 7. Check bytecode again
-  console.log(`\n⏳ Checking on-chain bytecode...`);
-  let onChainDeployed = false;
-  
-  for (let i = 0; i < 45; i++) {
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    onChainDeployed = await isWalletDeployedOnChain(walletAddress);
-    
-    if (onChainDeployed) {
-      console.log(`✅ On-chain deployment confirmed! (after ${i * 2}s)`);
-      break;
-    }
-    
-    if (i % 10 === 0 && i > 0) {
-      console.log(`   Still waiting... (${i * 2}s)`);
-      
-      // Check Circle state again
-      try {
-        const walletState = await getCircleWalletState(walletId);
-        console.log(`   Circle isDeployed: ${walletState?.isDeployed ?? 'undefined'}`);
-      } catch (err) {
-        // Ignore
-      }
-    }
-  }
-
-  // 8. Final verification with diagnostics
-  if (!onChainDeployed) {
-    console.log(`\n⚠️ On-chain bytecode not detected yet.`);
-    
-    // Check Circle's reported deployment status
-    try {
-      const walletState = await getCircleWalletState(walletId);
-      if (walletState?.isDeployed) {
-        console.log(`✅ Circle reports wallet as deployed!`);
-        onChainDeployed = true;
-      }
-    } catch (err) {
-      // Ignore
-    }
-    
-    // Run diagnostics
-    if (!onChainDeployed) {
-      await diagnoseWalletDeployment(walletAddress);
-    }
-  }
-
-  // ✅ If we have a transaction hash, consider it deployed (transaction was successful)
-  if (txHash && !onChainDeployed) {
-    console.log(`✅ Transaction confirmed on-chain. Marking as deployed.`);
-    onChainDeployed = true;
-  }
-
-  console.log('\n' + '='.repeat(60));
-  console.log(`📊 DEPLOYMENT SUMMARY`);
-  console.log(`   Transaction ID: ${txId}`);
-  console.log(`   Transaction Hash: ${txHash || 'N/A'}`);
-  console.log(`   On-Chain Deployed: ${onChainDeployed ? '✅ YES' : '⚠️ PENDING'}`);
-  // ✅ CORRECTED EXPLORER URL
-  console.log(`   Explorer URL: ${txHash ? `https://testnet.arcscan.app/tx/${txHash}` : `https://testnet.arcscan.app/address/${walletAddress}`}`);
-  console.log('='.repeat(60));
-
-  return {
-    success: true,
-    txId,
-    txHash: txHash || undefined,
-    onChainDeployed,
-    message: onChainDeployed 
-      ? 'Wallet activated successfully! Ready for gasless transactions.' 
-      : 'Activation transaction submitted. Deployment may take a few minutes to index.'
-  };
-}
-
-// Add to walletService.ts
-
-/**
- * 🔍 Discover available tokens for a wallet
- * Helps debug token ID issues
- */
-/**
- * 🔍 Discover available tokens for a wallet
- * Helps debug token ID issues
- */
-export async function discoverAvailableTokens() {
-  const client = getWalletsClient();
-  
-  try {
-    console.log(`\n🔍 DISCOVERING AVAILABLE TOKENS`);
-    console.log('='.repeat(60));
-    
-    // Define proper type for the token response
-    interface TokenResponse {
-      data?: {
-        tokens?: Array<{
-          id: string;
-          symbol: string;
-          blockchain: string;
-          name?: string;
-          decimals?: number;
-        }>;
-      };
-    }
-    
-    // Try to list tokens
-    const response = await fetch('https://api.circle.com/v1/w3s/tokens', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${circleConfig.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    
-    if (response.ok) {
-      const result = await response.json() as TokenResponse;
-      const tokens = result.data?.tokens || [];
-      
-      console.log(`   Found ${tokens.length} tokens:`);
-      tokens.forEach((token) => {
-        console.log(`   - ${token.symbol} (${token.id}) on ${token.blockchain}`);
-        if (token.blockchain === 'ARC-TESTNET') {
-          console.log(`     ✅ ARC-TESTNET USDC: ${token.id}`);
-        }
-      });
-    } else {
-      console.log(`   Could not fetch token list: ${response.status}`);
-    }
-    
-    // Check our configured token ID
-    console.log(`\n   Configured token ID: ${circleConfig.usdcTokenId}`);
-    console.log('='.repeat(60));
-    
-  } catch (err: any) {
-    console.error('Token discovery error:', err.message);
-  }
-}
-
-
-export default {
-  createUserWallet,
-  getDepositAddress,
-  getUSDCBalance,
-  getCircleWalletState,
-  isWalletDeployedOnChain,
-  diagnoseWalletDeployment,
-  deployCircleWallet,
-    discoverAvailableTokens,
-};
-</file>
-
 <file path="backend/src/utils/pricing.ts">
 export interface PricingConfig {
   chunkSeconds: number;
@@ -3395,74 +1628,30 @@ async function test() {
 test();
 </file>
 
-<file path="backend/tsconfig.json">
+<file path="backend/vercel.json">
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "typeRoots": ["./node_modules/@types", "./src/types"]
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 30,
+      "memory": 1024,
+      "includeFiles": "src/**/*"
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.ts"
+    }
+  ]
 }
 </file>
 
-<file path="frontend/.gitignore">
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
-
-# testing
-/coverage
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files (can opt-in for committing if needed)
-.env*
-/backend/.env
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+<file path="frontend/.env.example">
+NEXT_PUBLIC_API_URL=http://localhost:3001/api
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_ARC_RPC_URL=https://rpc.testnet.arc.network
+NEXT_PUBLIC_USDC_CONTRACT=0x3600000000000000000000000000000000000000
+NEXT_PUBLIC_X402_FACILITATOR=https://facilitator.x402.org
 </file>
 
 <file path="frontend/eslint.config.mjs">
@@ -3487,10 +1676,46 @@ export default eslintConfig;
 </file>
 
 <file path="frontend/next.config.ts">
+// import type { NextConfig } from "next";
+
+// const nextConfig: NextConfig = {
+//   /* config options here */
+// };
+
+// export default nextConfig;
+
+
+
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // Allow images from external domains if needed
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+  },
+  // Enable CORS for API routes
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,PUT,DELETE,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-Requested-With, Content-Type, Authorization, Range' },
+        ],
+      },
+    ];
+  },
+  // Environment variables for client
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://arcstream-backend.vercel.app/api',
+  },
 };
 
 export default nextConfig;
@@ -3704,140 +1929,6 @@ export default function RootLayout({
 
 <file path="frontend/src/app/page.tsx">
 // // src/app/page.tsx
-
-// 'use client';
-
-// import { useEffect, useState } from 'react';
-// import WalletAuth from '@/components/WalletAuth';
-// import { videoAPI } from '@/lib/api';
-// import { Search, AlertCircle, RefreshCw } from 'lucide-react';
-// import Link from 'next/link';
-
-// interface Video {
-//   id: string;
-//   title: string;
-//   description: string;
-//   durationSeconds: number;
-//   pricingModel: 'per_5s' | 'per_minute';
-//   pricePerChunk: number;
-//   creatorWallet: string;
-//   videoUrl: string;
-//   createdAt: string;
-// }
-
-// export default function Home() {
-//   const [videos, setVideos] = useState<Video[]>([]);
-//   const [loading, setLoading] = useState(true);
-//   const [error, setError] = useState<string | null>(null);
-//   const [q, setQ] = useState('');
-
-//   const fetchVideos = async () => {
-//     setLoading(true);
-//     setError(null);
-//     try {
-//       const res = await videoAPI.list(q);
-      
-//       // ✅ FIX: Backend now returns { success, data: videos[], count }
-//       // Handle both new and old response formats for compatibility
-//       const videosData = res.data?.data || res.data || [];
-//       setVideos(Array.isArray(videosData) ? videosData : []);
-      
-//     } catch (err: any) {
-//       console.error('Fetch error:', err);
-//       setError('Could not connect to backend. Is it running on port 3001?');
-//       setVideos([]); // Ensure videos is always an array
-//     } finally {
-//       setLoading(false);
-//     }
-//   };
-
-//   useEffect(() => { 
-//     fetchVideos(); 
-//   }, [q]);
-
-//   return (
-//     <main className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 max-w-5xl mx-auto space-y-6">
-//       <header className="flex justify-between items-center">
-//         <h1 className="text-2xl font-bold text-gray-900 dark:text-white">🎬 ArcStream</h1>
-//         <Link 
-//           href="/upload" 
-//           className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium transition"
-//         >
-//           + List Video
-//         </Link>
-//       </header>
-      
-//       <WalletAuth />
-
-//       {/* Search Bar */}
-//       <div className="relative">
-//         <Search className="absolute left-3 top-3 text-gray-400" size={20}/>
-//         <input 
-//           value={q} 
-//           onChange={e => setQ(e.target.value)} 
-//           placeholder="Search by title or ID..." 
-//           className="w-full pl-10 p-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-//         />
-//       </div>
-
-//       {/* Error / Retry State */}
-//       {error && (
-//         <div className="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg flex items-center justify-between text-red-800 dark:text-red-200">
-//           <div className="flex items-center gap-2">
-//             <AlertCircle size={20}/>
-//             <span>{error}</span>
-//           </div>
-//           <button 
-//             onClick={fetchVideos} 
-//             className="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-1 rounded shadow-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition"
-//           >
-//             <RefreshCw size={16}/> Retry
-//           </button>
-//         </div>
-//       )}
-
-//       {/* Loading State */}
-//       {loading && !error && (
-//         <div className="text-center py-12">
-//           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-//           <p className="text-gray-500 dark:text-gray-400">Loading feed...</p>
-//         </div>
-//       )}
-
-//       {/* Video Grid */}
-//       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//         {videos.map(v => (
-//           <Link 
-//             key={v.id} 
-//             href={`/watch/${v.id}`} 
-//             className="block p-4 bg-white dark:bg-gray-800 rounded-lg shadow hover:shadow-md transition border border-gray-100 dark:border-gray-700"
-//           >
-//             <h3 className="font-semibold text-lg text-gray-900 dark:text-white">{v.title}</h3>
-//             <p className="text-gray-600 dark:text-gray-300 text-sm mt-1 line-clamp-2">{v.description}</p>
-//             <div className="mt-3 flex justify-between items-center text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700/50 px-2 py-1 rounded">
-//               <span className="font-medium text-blue-600 dark:text-blue-400">
-//                 💰 ${v.pricePerChunk.toFixed(6)} / {v.pricingModel === 'per_5s' ? '5s' : '1min'}
-//               </span>
-//               <span>⏱️ {Math.floor(v.durationSeconds/60)}m {v.durationSeconds%60}s</span>
-//             </div>
-//           </Link>
-//         ))}
-        
-//         {!loading && !error && videos.length === 0 && (
-//           <div className="col-span-2 text-center py-12 bg-white dark:bg-gray-800 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
-//             <p className="text-gray-500 dark:text-gray-400">No videos found.</p>
-//             <Link href="/upload" className="text-blue-600 dark:text-blue-400 hover:underline mt-2 inline-block">
-//               Be the first to list one!
-//             </Link>
-//           </div>
-//         )}
-//       </div>
-//     </main>
-//   );
-// }
-
-
-// frontend/src/app/page.tsx
 
 'use client';
 
@@ -4071,8 +2162,8 @@ import { useWallet } from '@/components/WalletAuth';
 import { videoAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
-import { Upload as UploadIcon, FileVideo, Link2, ToggleLeft, ToggleRight, Clock, DollarSign, Settings } from 'lucide-react';
-import { appConfig, formatDuration } from '@/config/app';
+import { Upload as UploadIcon, FileVideo, Link2, ToggleLeft, ToggleRight, DollarSign, Settings } from 'lucide-react';
+import { formatDuration } from '@/config/app';
 
 interface UploadForm {
   title: string;
@@ -4081,7 +2172,7 @@ interface UploadForm {
   chunkUnit: 'seconds' | 'minutes';
   chunkValue: string;
   pricePerChunk: string;
-  videoUrl: string;
+  videoUrl: string; // Used only for remote URL mode
 }
 
 export default function UploadPage() {
@@ -4107,6 +2198,7 @@ export default function UploadPage() {
     if (file) {
       setVideoFile(file);
       
+      // Auto-extract metadata
       const video = document.createElement('video');
       video.preload = 'metadata';
       video.onloadedmetadata = () => {
@@ -4115,14 +2207,11 @@ export default function UploadPage() {
         setForm(prev => ({ 
           ...prev, 
           durationSeconds: duration.toString(),
-          title: file.name.replace(/\.[^/.]+$/, "")
+          title: prev.title || file.name.replace(/\.[^/.]+$/, "") // Set title if empty
         }));
         URL.revokeObjectURL(video.src);
       };
       video.src = URL.createObjectURL(file);
-      
-      const localPath = `C:/Users/${process.env.USERNAME || 'worko'}/Videos/${file.name}`;
-      setForm(prev => ({ ...prev, videoUrl: localPath }));
     }
   };
 
@@ -4134,32 +2223,44 @@ export default function UploadPage() {
       return;
     }
     
-    if (!form.durationSeconds || parseInt(form.durationSeconds) < 5) {
-      toast.error('Video duration must be at least 5 seconds');
+    if (useLocalFile && !videoFile) {
+      toast.error('Please select a video file to upload');
       return;
     }
-    
+
     setSubmitting(true);
+    // Cloudinary uploads take time; we inform the user to be patient
+    const loadingToast = toast.loading(useLocalFile ? 'Uploading to Cloudinary (this may take a minute)...' : 'Listing video...');
+
     try {
-      const payload = {
-        title: form.title,
-        description: form.description,
-        durationSeconds: parseInt(form.durationSeconds, 10),
-        chunkUnit: form.chunkUnit,
-        chunkValue: form.chunkValue,
-        pricePerChunk: parseFloat(form.pricePerChunk),
-        videoUrl: form.videoUrl
-      };
+      const formData = new FormData();
       
-      console.log('📤 Uploading video:', payload);
+      // 1. Add Video Source
+      if (useLocalFile && videoFile) {
+        formData.append('video', videoFile);
+      } else {
+        formData.append('videoUrl', form.videoUrl);
+      }
+
+      // 2. Add Metadata
+      formData.append('title', form.title);
+      formData.append('description', form.description);
+      formData.append('durationSeconds', form.durationSeconds);
+      formData.append('chunkUnit', form.chunkUnit);
+      formData.append('chunkValue', form.chunkValue);
+      formData.append('pricePerChunk', form.pricePerChunk);
+
+      // 3. API Call (videoAPI.create handles the multipart headers)
+      const res = await videoAPI.create(formData, eoaAddress);
       
-      const res = await videoAPI.create(payload, eoaAddress);
-      
-      toast.success('✅ Video listed successfully!');
+      toast.dismiss(loadingToast);
+      toast.success('✅ Video published successfully!');
       router.push(`/watch/${res.data.data.id}`);
     } catch (err: any) {
+      toast.dismiss(loadingToast);
       console.error('Upload error:', err);
-      toast.error(err.response?.data?.error || 'Failed to list video');
+      // Backend error message or default
+      toast.error(err.response?.data?.error || 'Failed to publish video');
     } finally {
       setSubmitting(false);
     }
@@ -4170,7 +2271,7 @@ export default function UploadPage() {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // Calculate preview
+  // UI Preview Logic
   const getChunkSeconds = (): number => {
     const value = parseFloat(form.chunkValue) || 5;
     return form.chunkUnit === 'minutes' ? Math.round(value * 60) : Math.round(value);
@@ -4180,94 +2281,74 @@ export default function UploadPage() {
   const durationSec = parseInt(form.durationSeconds) || 0;
   const totalChunks = durationSec > 0 ? Math.ceil(durationSec / chunkSeconds) : 0;
   const totalCost = totalChunks * parseFloat(form.pricePerChunk || '0.001');
-
-  const isValidChunk = chunkSeconds >= 5 && chunkSeconds <= 3600 && chunkSeconds <= durationSec;
+  const isValidChunk = chunkSeconds >= 5 && chunkSeconds <= 3600 && chunkSeconds <= (durationSec || Infinity);
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
           <UploadIcon size={24} />
-          List Your Video
+          Publish Video
         </h1>
         
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Source Selection Toggle */}
+            
             <div className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Video Source:
+                Upload Method:
               </span>
               <button
                 type="button"
                 onClick={() => setUseLocalFile(!useLocalFile)}
-                className="flex items-center gap-2 text-blue-600 dark:text-blue-400"
+                className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-semibold"
               >
                 {useLocalFile ? (
                   <>
-                    <FileVideo size={16} />
-                    Local File
-                    <ToggleRight size={20} />
+                    <FileVideo size={16} /> Cloud Upload <ToggleRight size={24} />
                   </>
                 ) : (
                   <>
-                    <Link2 size={16} />
-                    Remote URL
-                    <ToggleLeft size={20} />
+                    <Link2 size={16} /> Remote URL <ToggleLeft size={24} />
                   </>
                 )}
               </button>
             </div>
 
-            {/* Local File Upload */}
             {useLocalFile ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Select Video File
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Select Video File
+                </label>
+                <div className={`border-2 border-dashed rounded-lg p-8 text-center transition ${videoFile ? 'border-green-500 bg-green-50/10' : 'border-gray-300 hover:border-blue-500'}`}>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="video-file"
+                  />
+                  <label htmlFor="video-file" className="cursor-pointer block">
+                    <FileVideo size={48} className={`mx-auto mb-3 ${videoFile ? 'text-green-500' : 'text-gray-400'}`} />
+                    <p className="text-gray-700 dark:text-gray-200 font-medium">
+                      {videoFile ? videoFile.name : 'Click to select video'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">
+                      MP4, MOV, or WebM (Max 100MB Recommended)
+                    </p>
                   </label>
-                  <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-blue-500 transition">
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="video-file"
-                    />
-                    <label htmlFor="video-file" className="cursor-pointer">
-                      <FileVideo size={48} className="mx-auto mb-2 text-gray-400" />
-                      <p className="text-gray-600 dark:text-gray-300">
-                        {videoFile ? videoFile.name : 'Click to select a video file'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        MP4, WebM, MOV (max 500MB recommended)
-                      </p>
-                    </label>
-                  </div>
-                  {videoFile && (
-                    <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 rounded text-sm">
-                      <p className="text-green-700 dark:text-green-300">
-                        ✓ Selected: {videoFile.name}
-                      </p>
-                      <p className="text-green-600 dark:text-green-400 text-xs">
-                        Size: {(videoFile.size / 1024 / 1024).toFixed(2)} MB
-                        {videoDuration && ` • Duration: ${formatDuration(videoDuration)}`}
-                      </p>
-                    </div>
-                  )}
                 </div>
-                
-                {form.videoUrl && (
-                  <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">File Path:</p>
-                    <code className="text-xs break-all">{form.videoUrl}</code>
+                {videoFile && (
+                  <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400 px-1">
+                    <span>Size: {(videoFile.size / (1024 * 1024)).toFixed(2)} MB</span>
+                    {videoDuration && <span>Detected Duration: {formatDuration(videoDuration)}</span>}
                   </div>
                 )}
               </div>
             ) : (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Public Video URL *
+                  Public Video URL
                 </label>
                 <input
                   name="videoUrl"
@@ -4275,199 +2356,65 @@ export default function UploadPage() {
                   type="url"
                   value={form.videoUrl}
                   onChange={handleChange}
-                  placeholder="https://example.com/video.mp4"
-                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  placeholder="https://example.com/my-video.mp4"
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
             )}
 
-            {/* Title */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Video Title *
-              </label>
-              <input
-                name="title"
-                required
-                value={form.title}
-                onChange={handleChange}
-                placeholder="Amazing Tutorial"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="grid grid-cols-1 gap-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+                <input name="title" required value={form.title} onChange={handleChange} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-white outline-none" />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+                <textarea name="description" required value={form.description} onChange={handleChange} rows={3} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-white outline-none" />
+              </div>
             </div>
 
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Description *
-              </label>
-              <textarea
-                name="description"
-                required
-                value={form.description}
-                onChange={handleChange}
-                placeholder="Brief intro to your video content..."
-                rows={4}
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Duration (sec)</label>
+                <input name="durationSeconds" type="number" required value={form.durationSeconds} onChange={handleChange} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-white outline-none" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Price / Chunk (USDC)</label>
+                <input name="pricePerChunk" type="number" step="0.000001" required value={form.pricePerChunk} onChange={handleChange} className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-white outline-none" />
+              </div>
             </div>
 
-            {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Duration (seconds) *
-              </label>
-              <input
-                name="durationSeconds"
-                required
-                type="number"
-                min="5"
-                step="1"
-                value={form.durationSeconds}
-                onChange={handleChange}
-                placeholder="300"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              />
-              {form.durationSeconds && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {formatDuration(parseInt(form.durationSeconds))}
-                </p>
-              )}
-            </div>
-
-            {/* Chunk Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
-                <Settings size={14} />
-                Chunk Duration *
+            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                <Settings size={16} /> x402 Chunk Configuration
               </label>
               <div className="flex gap-2">
-                <input
-                  name="chunkValue"
-                  required
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={form.chunkValue}
-                  onChange={handleChange}
-                  placeholder="5"
-                  className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                />
-                <select
-                  name="chunkUnit"
-                  value={form.chunkUnit}
-                  onChange={handleChange}
-                  className="w-32 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                >
+                <input name="chunkValue" type="number" value={form.chunkValue} onChange={handleChange} className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-white outline-none" />
+                <select name="chunkUnit" value={form.chunkUnit} onChange={handleChange} className="w-32 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-white outline-none">
                   <option value="seconds">Seconds</option>
                   <option value="minutes">Minutes</option>
                 </select>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {chunkSeconds >= 60 
-                  ? `${chunkSeconds / 60} minute${chunkSeconds >= 120 ? 's' : ''}`
-                  : `${chunkSeconds} second${chunkSeconds !== 1 ? 's' : ''}`} per chunk
-                {!isValidChunk && chunkSeconds > 0 && (
-                  <span className="text-red-500 ml-2">
-                    {chunkSeconds < 5 ? '(min 5 seconds)' : 
-                     chunkSeconds > 3600 ? '(max 60 minutes)' : 
-                     chunkSeconds > durationSec ? '(exceeds video duration)' : ''}
-                  </span>
+              <div className="mt-3 flex justify-between items-end">
+                <p className="text-xs text-gray-500">
+                  Total Chunks: <span className="font-bold text-blue-600">{totalChunks}</span><br /> 
+                  Total Cost: <span className="font-bold text-green-600">${totalCost.toFixed(4)} USDC</span>
+                </p>
+                {!isValidChunk && durationSec > 0 && (
+                   <p className="text-[10px] text-red-500 font-medium italic">Chunk size must be ≥ 5s and ≤ duration</p>
                 )}
-              </p>
-            </div>
-
-            {/* Price */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
-                <DollarSign size={14} />
-                Price per chunk (USDC) *
-              </label>
-              <input
-                name="pricePerChunk"
-                required
-                type="number"
-                step="0.000001"
-                min="0.000001"
-                max="0.01"
-                value={form.pricePerChunk}
-                onChange={handleChange}
-                placeholder="0.001"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                ≤ $0.01 per chunk (Hackathon compliant) ✓
-              </p>
-            </div>
-
-            {/* Preview */}
-            {durationSec > 0 && isValidChunk && (
-              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-2">📊 Video Preview</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Total Duration</p>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {formatDuration(durationSec)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Chunk Size</p>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {formatDuration(chunkSeconds)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Total Chunks</p>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {totalChunks} chunks
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Price per Chunk</p>
-                    <p className="font-medium text-green-600 dark:text-green-400">
-                      ${parseFloat(form.pricePerChunk || '0.001').toFixed(6)} USDC
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    💰 Total cost if fully watched: 
-                    <span className="font-bold ml-1">${totalCost.toFixed(6)} USDC</span>
-                  </p>
-                </div>
               </div>
-            )}
+            </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
-              disabled={submitting || !eoaAddress || !dcwAddress || (useLocalFile && !videoFile) || !isValidChunk}
-              className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+              disabled={submitting || !eoaAddress || (useLocalFile && !videoFile) || !isValidChunk}
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
             >
-              {submitting 
-                ? 'Publishing...' 
-                : !eoaAddress || !dcwAddress
-                  ? 'Connect Wallet to Publish' 
-                  : useLocalFile && !videoFile
-                  ? 'Select a Video File'
-                  : !isValidChunk
-                  ? 'Invalid Chunk Duration'
-                  : '🚀 Publish Video'
-              }
+              {submitting ? 'Processing Upload...' : '🚀 Publish to ArcStream'}
             </button>
           </form>
-        </div>
-
-        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
-          <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-2">💡 Chunking Tips</h3>
-          <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-            <li>• Minimum chunk: 5 seconds</li>
-            <li>• Maximum chunk: 60 minutes (3600 seconds)</li>
-            <li>• Shorter chunks = more granular payments</li>
-            <li>• Longer chunks = fewer payment interruptions</li>
-            <li>• First chunk is always free for preview</li>
-          </ul>
         </div>
       </div>
     </main>
@@ -4824,7 +2771,7 @@ export default function VideoPlayer({
   const [autoPayProcessedForChunk, setAutoPayProcessedForChunk] = useState<Set<number>>(new Set());
 
   const { chunkSeconds, totalChunks } = calculateVideoChunks(durationSeconds, chunkDurationSeconds);
-  const streamUrl = `http://localhost:3001/api/videos/${videoId}/stream`;
+const streamUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'}/api/videos/${videoId}/stream`;
   
   const isCurrentChunkPaid = unlockedChunks.has(currentChunk);
   const currentChunkEndTime = Math.min((currentChunk + 1) * chunkSeconds, durationSeconds);
@@ -5969,7 +3916,7 @@ const ARC_CHAIN_ID = '5042002';
 export const api: AxiosInstance = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
-  timeout: 30000, // 30 second timeout
+  timeout: 60000, // Increased timeout to 60s to allow for video upload processing
 });
 
 export interface PaymentDetails {
@@ -5999,53 +3946,26 @@ export const walletAPI = {
   deploy: (address: string) => api.post('/wallets/deploy', { address }),
 };
 
-
-// export const videoAPI = {
-//   list: (q?: string) => api.get(`/videos${q ? `?q=${q}` : ''}`),
-//   getVideo: (id: string) => api.get(`/videos/${id}`),
-  
-//   create: (payload: any, eoaAddress: string) => 
-//     api.post('/videos', payload, {
-//       headers: { Authorization: `Bearer ${eoaAddress}` }
-//     }),
-  
-//   signChunk: (videoId: string, chunkIndex: number, eoaAddress: string) => 
-//     api.post(`/videos/${videoId}/sign/${chunkIndex}`, {}, {
-//       headers: { Authorization: `Bearer ${eoaAddress}` }
-//     }),
-  
-//   requestChunkAccess: (videoId: string, chunkIndex: number, signedPayment?: SignedPayment) => {
-//     const headers: Record<string, string> = {};
-//     if (signedPayment) {
-//       headers['X-Payment-Authorization'] = `${signedPayment.signature}:${signedPayment.payerAddress}`;
-//       headers['X-Payment-Nonce'] = signedPayment.paymentDetails.nonce;
-//       headers['X-Payment-Price'] = signedPayment.paymentDetails.price;
-//       headers['X-Creator-Wallet'] = signedPayment.paymentDetails.recipient;
-//     }
-//     return api.post(`/videos/${videoId}/stream/${chunkIndex}`, {}, { headers });
-//   },
-  
-//   // ✅ NEW: Get paid chunks for a video
-//   getPaidChunks: (videoId: string, eoaAddress: string) =>
-//     api.get(`/videos/${videoId}/paid-chunks`, {
-//       headers: { Authorization: `Bearer ${eoaAddress}` }
-//     }),
-// };
-
-
-// frontend/src/lib/api.ts
-
 export const videoAPI = {
   list: (q?: string) => api.get(`/videos${q ? `?q=${q}` : ''}`),
   
   getVideo: (id: string) => api.get(`/videos/${id}`),
   
-  create: (payload: any, eoaAddress: string) => 
-    api.post('/videos', payload, {
-      headers: { Authorization: `Bearer ${eoaAddress}` }
-    }),
+  /**
+   * Supports both JSON (remote URL) and FormData (Cloudinary file upload)
+   */
+  create: (payload: any, eoaAddress: string) => {
+    const isFormData = payload instanceof FormData;
+    
+    return api.post('/videos', payload, {
+      headers: { 
+        Authorization: `Bearer ${eoaAddress}`,
+        // When sending FormData, we delete 'Content-Type' so Axios sets the correct boundary
+        ...(isFormData ? { 'Content-Type': 'multipart/form-data' } : {})
+      }
+    });
+  },
   
-  // ✅ NEW: Delete video
   delete: (videoId: string, eoaAddress: string) =>
     api.delete(`/videos/${videoId}`, {
       headers: { Authorization: `Bearer ${eoaAddress}` }
@@ -6098,9 +4018,7 @@ export default api;
 </file>
 
 <file path="frontend/tsc_output_2.txt">
-src/components/VideoPlayer.tsx(191,11): error TS2322: Type '(progress: { playedSeconds: number; played: number; loaded: number; loadedSeconds: number; }) => void' is not assignable to type 'ReactEventHandler<HTMLVideoElement>'.
-  Types of parameters 'progress' and 'event' are incompatible.
-    Type 'SyntheticEvent<HTMLVideoElement, Event>' is missing the following properties from type '{ playedSeconds: number; played: number; loaded: number; loadedSeconds: number; }': playedSeconds, played, loaded, loadedSeconds
+
 </file>
 
 <file path="frontend/tsc_output.txt">
@@ -6149,8 +4067,1613 @@ src/components/WalletAuth.tsx(80,11): error TS2339: Property 'info' does not exi
 }
 </file>
 
+<file path="frontend/vercel.json">
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "devCommand": "next dev",
+  "installCommand": "npm install",
+  "outputDirectory": ".next"
+}
+</file>
+
 <file path="project_snapshot.txt">
 
+</file>
+
+<file path="vercel.json">
+{
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/$1"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "X-Requested-With, Content-Type, Authorization, Range, X-Payment-Authorization, X-Payment-Nonce, X-Payment-Price, X-Creator-Wallet"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    }
+  ]
+}
+</file>
+
+<file path="backend/api/index.ts">
+// backend/api/index.ts
+
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import dotenv from 'dotenv';
+import { getEnv } from '../src/config/environment';
+import { logTransaction, getTransactionStats } from '../src/utils/transactionLogger';
+
+// Load environment
+dotenv.config();
+const env = getEnv();
+
+const app = express();
+
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  process.env.FRONTEND_URL, 
+  process.env.FRONTEND_PREVIEW_PATTERN
+].filter(Boolean) as (string | RegExp)[];
+
+if (process.env.FRONTEND_PREVIEW_PATTERN) {
+  const index = allowedOrigins.indexOf(process.env.FRONTEND_PREVIEW_PATTERN);
+  if (index !== -1) {
+    // This turns the string into a secure Regex: ^https://arcstream-frontend-.*\.onrender\.com$
+    allowedOrigins[index] = new RegExp(process.env.FRONTEND_PREVIEW_PATTERN);
+  }
+}
+
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Type'],
+}));
+app.use(helmet({ 
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false 
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Video stream headers
+app.use('/api/videos/:id/stream', (req, res, next) => {
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'arcstream-backend',
+    version: '1.0.0',
+    chain: 'ARC-TESTNET',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Routes
+app.use('/api/wallets', require('../src/routes/wallets'));
+app.use('/api/videos', require('../src/routes/videos'));
+app.use('/api/auth', require('../src/routes/auth').default);
+
+// Payment logging middleware
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const originalJson = res.json.bind(res);
+  res.json = (data: any) => {
+    if ((req as any).x402Payment) {
+      logTransaction({
+        resource: (req as any).x402Payment.resource || req.url,
+        segment: (req as any).x402Payment.chunk || 0,
+        amount: (req as any).x402Payment.amount || '0',
+        payer: (req as any).x402Payment.payer,
+        recipient: (req as any).x402Payment.recipient,
+        nonce: (req as any).x402Payment.nonce,
+        chain: 'ARC-TESTNET'
+      });
+    }
+    return originalJson(data);
+  };
+  next();
+});
+
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: 'Endpoint not found', path: req.path });
+});
+
+// Error handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Unhandled error:', err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error'
+  });
+});
+
+export default app;
+</file>
+
+<file path="backend/src/routes/media.ts">
+// backend/src/routes/media.ts
+import express from 'express';
+
+const router = express.Router();
+
+/**
+ * Cloudinary-Era Media Route
+ * Since we now use Cloudinary, we don't serve local files from C:/Users anymore.
+ * This route can remain as a placeholder or be used to redirect to Cloudinary 
+ * if you want to mask the actual Cloudinary URLs.
+ */
+router.get('/info', (req, res) => {
+  res.json({
+    status: "active",
+    provider: "Cloudinary",
+    message: "Media is now handled via Cloudinary integration."
+  });
+});
+
+/**
+ * If you still have code pointing to /api/media/video/:id, 
+ * this redirect ensures they don't 404 but go to the cloud instead.
+ * (Optional: only if you have a database lookup for the cloud URL here)
+ */
+router.get('/video/:id', (req, res) => {
+  // In a full implementation, you'd find the video in the DB and redirect
+  // res.redirect(video.videoUrl);
+  res.status(410).json({ 
+    error: "Local file serving is deprecated. Please use the videoUrl provided by the Video API." 
+  });
+});
+
+export default router;
+</file>
+
+<file path="backend/src/services/walletService.ts">
+// backend/src/services/walletService.ts
+
+import { initiateDeveloperControlledWalletsClient } from '@circle-fin/developer-controlled-wallets';
+import { circleConfig, arcTestnet } from '../config/circle';
+import { createPublicClient, http, formatUnits, type Address, getAddress } from 'viem';
+import { z } from 'zod';
+
+const USDC_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [{ name: 'account', type: 'address' }],
+    outputs: [{ name: 'balance', type: 'uint256' }],
+  },
+] as const;
+
+const walletSchema = z.object({
+  userId: z.string().min(3).max(50),
+  userEmail: z.string().email(),
+});
+
+// ✅ Type for JSON-RPC response
+interface RpcResponse {
+  jsonrpc: string;
+  id: number;
+  result?: string;
+  error?: {
+    code: number;
+    message: string;
+  };
+}
+
+let walletsClient: ReturnType<typeof initiateDeveloperControlledWalletsClient> | null = null;
+
+function getWalletsClient() {
+  if (!circleConfig.apiKey || !circleConfig.entitySecret) {
+    throw new Error('Circle Configuration Missing');
+  }
+  if (!walletsClient) {
+    walletsClient = initiateDeveloperControlledWalletsClient({
+      apiKey: circleConfig.apiKey,
+      entitySecret: circleConfig.entitySecret,
+    });
+  }
+  return walletsClient;
+}
+
+export { getWalletsClient };
+
+const arcClient = createPublicClient({
+  chain: arcTestnet,
+  transport: http(circleConfig.rpcUrl, {
+    batch: { batchSize: 10 },
+    retryCount: 3,
+    retryDelay: 1000,
+  }),
+});
+
+export async function createUserWallet(userId: string, userEmail: string) {
+  const validated = walletSchema.parse({ userId, userEmail });
+  const client = getWalletsClient();
+
+  const walletSetRes = await client.createWalletSet({
+    name: `ArcStream-${validated.userId.slice(0, 20)}`,
+  });
+  const walletSetId = walletSetRes.data?.walletSet?.id;
+  if (!walletSetId) throw new Error('Failed to create wallet set');
+
+  const walletsRes = await client.createWallets({
+    blockchains: ['ARC-TESTNET'],
+    count: 1,
+    walletSetId,
+    accountType: 'SCA',
+  });
+  
+  const wallet = walletsRes.data?.wallets?.[0];
+  if (!wallet?.address || !wallet?.id) throw new Error('Failed to create wallet');
+
+  return {
+    success: true,
+    walletAddress: wallet.address,
+    walletId: wallet.id,
+    walletSetId,
+    chain: 'ARC-TESTNET',
+  };
+}
+
+export function getDepositAddress(walletAddress: string) {
+  if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+    throw new Error('Invalid wallet address format');
+  }
+  return {
+    address: walletAddress,
+    chain: 'ARC-TESTNET',
+    chainId: arcTestnet.id,
+    token: 'USDC',
+    contractAddress: circleConfig.usdcContractAddress,
+    faucetUrl: 'https://faucet.circle.com',
+    // ✅ CORRECTED EXPLORER URL
+    explorerUrl: `https://testnet.arcscan.app/address/${walletAddress}`,
+  };
+}
+
+export async function getUSDCBalance(walletAddress: string) {
+  if (!walletAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+    throw new Error('Invalid wallet address format');
+  }
+
+  try {
+    const balance = await arcClient.readContract({
+      address: circleConfig.usdcContractAddress as Address,
+      abi: USDC_ABI,
+      functionName: 'balanceOf',
+      args: [walletAddress as Address],
+    }as any);
+
+    return {
+      success: true,
+      walletAddress,
+      balanceUSDC: formatUnits(balance as bigint, 6),
+      balanceRaw: (balance as bigint).toString(),
+      currency: 'USDC',
+      chain: 'ARC-TESTNET',
+      contractAddress: circleConfig.usdcContractAddress,
+      source: 'arc-rpc',
+      timestamp: new Date().toISOString(),
+    };
+  } catch (rpcErr: any) {
+    console.error('RPC balance query failed:', rpcErr?.message || rpcErr);
+    return {
+      success: false,
+      error: 'Failed to fetch USDC balance from Arc RPC',
+      walletAddress,
+    };
+  }
+}
+
+export async function getCircleWalletState(walletId: string) {
+  const response = await fetch(`https://api.circle.com/v1/w3s/wallets/${walletId}`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${circleConfig.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to fetch wallet state: ${response.status} ${errorText}`);
+  }
+
+  const result: any = await response.json();
+  return result.data?.wallet;
+}
+
+/**
+ * ✅ IMPROVED: Check on-chain bytecode with multiple methods
+ */
+export async function isWalletDeployedOnChain(walletAddress: string): Promise<boolean> {
+  try {
+    // Method 1: viem getBytecode
+    const code = await arcClient.getBytecode({ 
+      address: getAddress(walletAddress) 
+    });
+    
+    if (code && code !== '0x' && code !== '0x0') {
+      console.log(`✅ Bytecode detected via viem: ${code.slice(0, 30)}...`);
+      return true;
+    }
+    
+    // Method 2: Direct RPC call (fallback)
+    const response = await fetch(circleConfig.rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_getCode',
+        params: [walletAddress, 'latest'],
+        id: 1
+      })
+    });
+    
+    const result = await response.json() as RpcResponse;
+    const rpcCode = result.result;
+    
+    if (rpcCode && rpcCode !== '0x' && rpcCode !== '0x0') {
+      console.log(`✅ Bytecode detected via RPC: ${rpcCode.slice(0, 30)}...`);
+      return true;
+    }
+    
+    return false;
+  } catch (err: any) {
+    console.error('isWalletDeployedOnChain error:', err.message);
+    return false;
+  }
+}
+
+/**
+ * 🔍 Diagnostic: Check bytecode with detailed logging
+ */
+export async function diagnoseWalletDeployment(walletAddress: string) {
+  console.log(`\n🔍 DIAGNOSING WALLET: ${walletAddress}`);
+  console.log('='.repeat(60));
+  
+  // Method 1: viem getBytecode
+  try {
+    const code = await arcClient.getBytecode({ 
+      address: getAddress(walletAddress) 
+    });
+    console.log(`   Viem getBytecode result: "${code}"`);
+    console.log(`   Length: ${code?.length || 0} characters`);
+    console.log(`   Deployed: ${!!code && code !== '0x' && code !== '0x0'}`);
+  } catch (err: any) {
+    console.log(`   Viem getBytecode error: ${err.message}`);
+  }
+  
+  // Method 2: Direct RPC call
+  try {
+    const response = await fetch(circleConfig.rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'eth_getCode',
+        params: [walletAddress, 'latest'],
+        id: 1
+      })
+    });
+    
+    const result = await response.json() as RpcResponse;
+    console.log(`   Direct RPC eth_getCode result: "${result.result}"`);
+    console.log(`   Length: ${result.result?.length || 0} characters`);
+  } catch (err: any) {
+    console.log(`   Direct RPC error: ${err.message}`);
+  }
+  
+  // Method 3: Check balance
+  try {
+    const balance = await getUSDCBalance(walletAddress);
+    console.log(`   Balance: ${balance.success ? balance.balanceUSDC + ' USDC' : 'Failed to fetch'}`);
+  } catch (err: any) {
+    console.log(`   Balance check error: ${err.message}`);
+  }
+  
+  // Method 4: Check explorer URL
+  // ✅ CORRECTED EXPLORER URL
+  console.log(`   Explorer: https://testnet.arcscan.app/address/${walletAddress}`);
+  console.log('='.repeat(60));
+}
+
+/**
+ * ✅ WORKING: Deploy SCA wallet using contractExecution with zero-value self-transfer
+ * Based on YieldPool's proven deployment flow
+ */
+export async function deployCircleWallet(walletId: string, walletAddress: string) {
+  const client = getWalletsClient();
+  
+  console.log(`\n🚀 ACTIVATING SCA WALLET`);
+  console.log('='.repeat(60));
+  console.log(`   Wallet ID: ${walletId}`);
+  console.log(`   Address: ${walletAddress}`);
+  
+  // 1. Check if already deployed
+  const alreadyDeployed = await isWalletDeployedOnChain(walletAddress);
+  if (alreadyDeployed) {
+    console.log(`✅ Wallet already deployed on-chain.`);
+    console.log('='.repeat(60));
+    return {
+      success: true,
+      txId: 'already-deployed',
+      txHash: undefined,
+      onChainDeployed: true,
+      message: 'Wallet already deployed on-chain'
+    };
+  }
+
+  // 2. Check Circle wallet state
+  try {
+    const walletState = await getCircleWalletState(walletId);
+    console.log(`   Circle state: ${walletState?.state}`);
+    console.log(`   Circle isDeployed: ${walletState?.isDeployed}`);
+  } catch (err: any) {
+    console.log(`   Could not fetch Circle state: ${err.message}`);
+  }
+
+  // 3. Check balance
+  const balanceCheck = await getUSDCBalance(walletAddress);
+  const balance = balanceCheck.success ? parseFloat(balanceCheck.balanceUSDC || '0') : 0;
+  console.log(`   Current balance: ${balance} USDC`);
+
+  // 4. Trigger lazy deployment via contract execution
+  console.log(`\n📤 Initiating activation via contractExecution (0 USDC self-transfer)...`);
+  
+  let response;
+  try {
+response = await client.createContractExecutionTransaction({
+  walletId: walletId,
+  blockchain: 'ARC-TESTNET',
+  contractAddress: circleConfig.usdcContractAddress,
+  abiFunctionSignature: 'transfer(address,uint256)',
+  abiParameters: [walletAddress, '0'], // ✅ '0' as integer string is correct for 0 amount
+  fee: {
+    type: 'level',
+    config: { feeLevel: 'MEDIUM' }
+  },
+    } as any);
+  } catch (err: any) {
+    console.error('❌ Contract execution error:', err.message);
+    
+    if (err.message.includes('not yet deployed') || err.message.includes('insufficient')) {
+      throw new Error(
+        `Wallet needs funding before activation. Current balance: ${balance} USDC. ` +
+        `Please fund the wallet with at least 0.001 USDC for gas fees.`
+      );
+    }
+    throw err;
+  }
+
+  const txId = response.data?.id;
+  if (!txId) {
+    throw new Error('SDK returned no transaction ID');
+  }
+  
+  console.log(`   Activation TX ID: ${txId}`);
+
+  // 5. Poll for Circle transaction completion AND get transaction hash
+  let txHash: string | null = null;
+  let txComplete = false;
+  
+  console.log(`\n⏳ Waiting for Circle confirmation...`);
+  
+  for (let i = 0; i < 60; i++) {
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    try {
+      const txStatus = await client.getTransaction({ id: txId });
+      const state = txStatus.data?.transaction?.state;
+      txHash = txStatus.data?.transaction?.txHash || txHash;
+      
+      if (i % 3 === 0 || state === 'COMPLETE') {
+        console.log(`   State: ${state} ${txHash ? `| Hash: ${txHash.slice(0, 15)}...` : ''} (${i * 5}s)`);
+      }
+      
+      if (state === 'COMPLETE' || state === 'CONFIRMED') {
+        txComplete = true;
+        console.log(`✅ Circle transaction confirmed!`);
+        break;
+      }
+      
+      if (state === 'FAILED') {
+        const errorReason = txStatus.data?.transaction?.errorReason || 'Unknown error';
+        throw new Error(`Transaction failed: ${errorReason}`);
+      }
+    } catch (pollErr: any) {
+      console.log(`   Poll error: ${pollErr.message}`);
+    }
+  }
+
+  if (!txComplete) {
+    console.warn(`⚠️ Transaction confirmation timed out.`);
+  }
+
+  // 6. If we have a transaction hash, wait for it to be mined
+  if (txHash) {
+    console.log(`\n⏳ Waiting for transaction to be mined...`);
+    console.log(`   TX Hash: ${txHash}`);
+    // ✅ CORRECTED EXPLORER URL
+    console.log(`   Explorer: https://testnet.arcscan.app/tx/${txHash}`);
+    
+    let receiptFound = false;
+    
+    for (let i = 0; i < 30; i++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      try {
+        const receipt = await arcClient.getTransactionReceipt({ 
+          hash: txHash as `0x${string}` 
+        });
+        
+        if (receipt) {
+          console.log(`✅ Transaction mined!`);
+          console.log(`   Block: ${receipt.blockNumber}`);
+          console.log(`   Status: ${receipt.status === 'success' ? 'SUCCESS' : 'FAILED'}`);
+          console.log(`   Gas used: ${receipt.gasUsed}`);
+          
+          if (receipt.contractAddress) {
+            console.log(`   Contract deployed at: ${receipt.contractAddress}`);
+          }
+          
+          receiptFound = true;
+          break;
+        }
+      } catch (err) {
+        // Receipt not available yet
+      }
+      
+      if (i % 5 === 0 && i > 0) {
+        console.log(`   Waiting for receipt... (${i * 2}s)`);
+      }
+    }
+    
+    if (!receiptFound) {
+      console.log(`   ⚠️ Receipt not found. Transaction may still be pending.`);
+    }
+  }
+
+  // 7. Check bytecode again
+  console.log(`\n⏳ Checking on-chain bytecode...`);
+  let onChainDeployed = false;
+  
+  for (let i = 0; i < 45; i++) {
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    onChainDeployed = await isWalletDeployedOnChain(walletAddress);
+    
+    if (onChainDeployed) {
+      console.log(`✅ On-chain deployment confirmed! (after ${i * 2}s)`);
+      break;
+    }
+    
+    if (i % 10 === 0 && i > 0) {
+      console.log(`   Still waiting... (${i * 2}s)`);
+      
+      // Check Circle state again
+      try {
+        const walletState = await getCircleWalletState(walletId);
+        console.log(`   Circle isDeployed: ${walletState?.isDeployed ?? 'undefined'}`);
+      } catch (err) {
+        // Ignore
+      }
+    }
+  }
+
+  // 8. Final verification with diagnostics
+  if (!onChainDeployed) {
+    console.log(`\n⚠️ On-chain bytecode not detected yet.`);
+    
+    // Check Circle's reported deployment status
+    try {
+      const walletState = await getCircleWalletState(walletId);
+      if (walletState?.isDeployed) {
+        console.log(`✅ Circle reports wallet as deployed!`);
+        onChainDeployed = true;
+      }
+    } catch (err) {
+      // Ignore
+    }
+    
+    // Run diagnostics
+    if (!onChainDeployed) {
+      await diagnoseWalletDeployment(walletAddress);
+    }
+  }
+
+  // ✅ If we have a transaction hash, consider it deployed (transaction was successful)
+  if (txHash && !onChainDeployed) {
+    console.log(`✅ Transaction confirmed on-chain. Marking as deployed.`);
+    onChainDeployed = true;
+  }
+
+  console.log('\n' + '='.repeat(60));
+  console.log(`📊 DEPLOYMENT SUMMARY`);
+  console.log(`   Transaction ID: ${txId}`);
+  console.log(`   Transaction Hash: ${txHash || 'N/A'}`);
+  console.log(`   On-Chain Deployed: ${onChainDeployed ? '✅ YES' : '⚠️ PENDING'}`);
+  // ✅ CORRECTED EXPLORER URL
+  console.log(`   Explorer URL: ${txHash ? `https://testnet.arcscan.app/tx/${txHash}` : `https://testnet.arcscan.app/address/${walletAddress}`}`);
+  console.log('='.repeat(60));
+
+  return {
+    success: true,
+    txId,
+    txHash: txHash || undefined,
+    onChainDeployed,
+    message: onChainDeployed 
+      ? 'Wallet activated successfully! Ready for gasless transactions.' 
+      : 'Activation transaction submitted. Deployment may take a few minutes to index.'
+  };
+}
+
+// Add to walletService.ts
+
+/**
+ * 🔍 Discover available tokens for a wallet
+ * Helps debug token ID issues
+ */
+/**
+ * 🔍 Discover available tokens for a wallet
+ * Helps debug token ID issues
+ */
+export async function discoverAvailableTokens() {
+  const client = getWalletsClient();
+  
+  try {
+    console.log(`\n🔍 DISCOVERING AVAILABLE TOKENS`);
+    console.log('='.repeat(60));
+    
+    // Define proper type for the token response
+    interface TokenResponse {
+      data?: {
+        tokens?: Array<{
+          id: string;
+          symbol: string;
+          blockchain: string;
+          name?: string;
+          decimals?: number;
+        }>;
+      };
+    }
+    
+    // Try to list tokens
+    const response = await fetch('https://api.circle.com/v1/w3s/tokens', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${circleConfig.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (response.ok) {
+      const result = await response.json() as TokenResponse;
+      const tokens = result.data?.tokens || [];
+      
+      console.log(`   Found ${tokens.length} tokens:`);
+      tokens.forEach((token) => {
+        console.log(`   - ${token.symbol} (${token.id}) on ${token.blockchain}`);
+        if (token.blockchain === 'ARC-TESTNET') {
+          console.log(`     ✅ ARC-TESTNET USDC: ${token.id}`);
+        }
+      });
+    } else {
+      console.log(`   Could not fetch token list: ${response.status}`);
+    }
+    
+    // Check our configured token ID
+    console.log(`\n   Configured token ID: ${circleConfig.usdcTokenId}`);
+    console.log('='.repeat(60));
+    
+  } catch (err: any) {
+    console.error('Token discovery error:', err.message);
+  }
+}
+
+
+export default {
+  createUserWallet,
+  getDepositAddress,
+  getUSDCBalance,
+  getCircleWalletState,
+  isWalletDeployedOnChain,
+  diagnoseWalletDeployment,
+  deployCircleWallet,
+    discoverAvailableTokens,
+};
+</file>
+
+<file path="backend/tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": false
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+</file>
+
+<file path="backend/src/config/environment.ts">
+// backend/src/config/environment.ts
+
+import { z } from 'zod';
+
+const envSchema = z.object({
+  PORT: z.coerce.number().default(3001),
+  NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
+  CIRCLE_API_KEY: z.string().min(1),
+  CIRCLE_ENTITY_SECRET: z.string().min(1),
+  CIRCLE_USDC_TOKEN_ID: z.string().uuid().default('3c90c3cc-0d44-4b50-8888-8dd25736052a'), // ✅ Arc Testnet USDC
+  ARC_RPC_URL: z.string().url().default('https://rpc.testnet.arc.network'),
+  USDC_CONTRACT_ADDRESS: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
+  X402_FACILITATOR_URL: z.string().url().default('https://facilitator.x402.org'),
+  FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+  REDIS_URL: z.string().url().optional(),
+  ARC_CHAIN_ID: z.coerce.number().default(5042002),
+});
+
+export type EnvConfig = z.infer<typeof envSchema>;
+
+let validatedEnv: EnvConfig;
+
+export function getEnv(): EnvConfig {
+  if (!validatedEnv) {
+    try {
+      validatedEnv = envSchema.parse(process.env);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        console.error('❌ Invalid environment variables:');
+        error.errors.forEach((err) => console.error(`  - ${err.path.join('.')}: ${err.message}`));
+        process.exit(1);
+      }
+      throw error;
+    }
+  }
+  return validatedEnv;
+}
+</file>
+
+<file path="backend/src/routes/videos.ts">
+// backend/src/routes/videos.ts
+
+import express, { Request, Response, NextFunction } from 'express';
+import { getAddress } from 'viem';
+import { createVideo, getAllVideos, getVideoById } from '../services/videoService';
+import { createX402Middleware, type X402Options } from '../middleware/x402';
+import { generateDemoTransactions } from '../services/nanopaymentsService';
+import { getTransactionStats } from '../utils/transactionLogger';
+import { prisma } from '../lib/prisma';
+import { Readable } from 'stream';
+import { signPaymentWithCircle } from '../services/nanopaymentsService';
+import { v2 as cloudinary } from 'cloudinary';
+import multer from 'multer';
+import path from 'path';
+
+const router = express.Router();
+
+// --- Cloudinary Configuration ---
+cloudinary.config({ 
+  secure: true 
+});
+
+// Multer setup to handle the file in memory (important for Render free tier)
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit - adjust as needed
+});
+
+// 🔒 Production-safe parameter extractor
+const getRouteParam = (param: string | string[] | undefined): string | undefined => {
+  if (typeof param === 'string') return param;
+  if (Array.isArray(param) && param.length > 0) return param[0];
+  return undefined;
+};
+
+// 🔐 Auth middleware helper
+const getAuthenticatedUser = (req: Request) => {
+  const sessionUser = (req as any).session?.user;
+  if (sessionUser?.eoaAddress) return sessionUser;
+  
+  const authHeader = req.headers['authorization'];
+  if (authHeader?.startsWith('Bearer ')) {
+    const eoaAddress = authHeader.slice(7);
+    return { eoaAddress };
+  }
+  return null;
+};
+
+// --- ROUTES ---
+
+// 1. POST /api/videos - Create new video with Cloudinary Upload
+router.post('/', upload.single('video'), async (req: Request, res: Response) => {
+  try {
+    const authenticatedUser = getAuthenticatedUser(req);
+    if (!authenticatedUser?.eoaAddress) {
+      return res.status(401).json({ error: 'Authentication required.' });
+    }
+
+    const { title, description, durationSeconds, chunkUnit, chunkValue, pricePerChunk } = req.body;
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'No video file uploaded' });
+    }
+
+    // Upload to Cloudinary using a Buffer Stream
+    const streamUpload = (fileBuffer: Buffer) => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { resource_type: "video", folder: "arcstream" },
+          (error, result) => {
+            if (result) resolve(result);
+            else reject(error);
+          }
+        );
+        Readable.from(fileBuffer).pipe(stream);
+      });
+    };
+
+    const cloudinaryResult: any = await streamUpload(req.file.buffer);
+    const videoUrl = cloudinaryResult.secure_url;
+
+    // Calculate chunk duration
+    let chunkDurationSeconds: number;
+    const value = parseFloat(chunkValue) || 5;
+    if (chunkUnit === 'minutes') {
+      chunkDurationSeconds = Math.round(value * 60);
+    } else {
+      chunkDurationSeconds = Math.round(value);
+    }
+
+    // Find User in DB
+    const creator = await prisma.user.findUnique({
+      where: { eoaAddress: authenticatedUser.eoaAddress }
+    });
+
+    if (!creator) return res.status(401).json({ error: 'User not found in database.' });
+
+    // Save to Neon via Prisma
+    const video = await createVideo({ 
+      title, 
+      description, 
+      durationSeconds: parseInt(durationSeconds, 10),
+      chunkDurationSeconds,
+      pricePerChunk: parseFloat(pricePerChunk) || 0.001, 
+      creatorWallet: creator.eoaAddress,
+      creatorDcw: creator.dcwAddress,
+      videoUrl 
+    });
+
+    res.status(201).json({ success: true, data: video });
+  } catch (err: any) {
+    console.error('Upload error:', err);
+    res.status(500).json({ error: err.message || 'Failed to upload and create video' });
+  }
+});
+
+// 2. GET /api/videos - Feed with Search
+router.get('/', async (req: Request, res: Response) => {
+  let videos = await getAllVideos();
+  const { q } = req.query;
+  
+  if (q && typeof q === 'string') {
+    const search = q.toLowerCase();
+    videos = videos.filter(v => 
+      v.title.toLowerCase().includes(search) || 
+      v.id.toLowerCase().includes(search) ||
+      v.description?.toLowerCase().includes(search)
+    );
+  }
+  
+  res.json({ success: true, data: videos, count: videos.length });
+});
+
+// 3. GET /api/videos/:id - Single video metadata
+router.get('/:id', async (req: Request, res: Response) => {
+  const videoId = getRouteParam(req.params.id);
+  if (!videoId) return res.status(400).json({ error: 'Missing video ID' });
+  
+  const video = await getVideoById(videoId);
+  if (!video) return res.status(404).json({ error: 'Video not found' });
+  
+  res.json({ success: true, data: video });
+});
+
+// 4. GET /api/videos/:id/stream - Stream video (Cloudinary Proxy)
+router.get('/:id/stream', async (req: Request, res: Response) => {
+  const videoId = getRouteParam(req.params.id);
+  const video = await getVideoById(videoId!);
+  if (!video) return res.status(404).json({ error: 'Video not found' });
+
+  try {
+    const fetchOptions: any = {};
+    if (req.headers.range) {
+      fetchOptions.headers = { Range: req.headers.range };
+    }
+
+    const response = await fetch(video.videoUrl, fetchOptions);
+    
+    if (response.status === 206 || response.status === 200) {
+      res.status(response.status);
+      response.headers.forEach((value, key) => {
+        if (!['content-encoding', 'transfer-encoding'].includes(key.toLowerCase())) {
+          res.setHeader(key, value);
+        }
+      });
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      
+      if (response.body) {
+        Readable.from(response.body as any).pipe(res);
+      } else {
+        res.end();
+      }
+    } else {
+      res.status(response.status).json({ error: 'Failed to fetch remote video' });
+    }
+  } catch (err: any) {
+    res.status(502).json({ error: 'Stream proxy failed', details: err.message });
+  }
+});
+
+// 5. DELETE /api/videos/:id - Delete video record
+router.delete('/:id', async (req: Request, res: Response) => {
+  const videoId = getRouteParam(req.params.id);
+  const authenticatedUser = getAuthenticatedUser(req);
+  if (!authenticatedUser?.eoaAddress) return res.status(401).json({ error: 'Auth required' });
+
+  try {
+    const video = await prisma.video.findUnique({ where: { id: videoId } });
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    
+    if (video.creatorAddress.toLowerCase() !== authenticatedUser.eoaAddress.toLowerCase()) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    await prisma.payment.deleteMany({ where: { videoId: videoId } });
+    await prisma.video.delete({ where: { id: videoId } });
+    
+    res.json({ success: true, message: 'Video deleted successfully' });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 6. POST /api/videos/:id/sign/:chunk - Circle Payment Signing
+router.post('/:id/sign/:chunk', async (req: Request, res: Response) => {
+  const videoId = getRouteParam(req.params.id);
+  const chunkIndex = parseInt(getRouteParam(req.params.chunk) || '0', 10);
+  const authenticatedUser = getAuthenticatedUser(req);
+
+  if (!authenticatedUser?.eoaAddress) return res.status(401).json({ error: 'Auth required' });
+
+  try {
+    const video = await getVideoById(videoId!);
+    const user = await prisma.user.findUnique({ where: { eoaAddress: authenticatedUser.eoaAddress } });
+    
+    if (!user?.circleWalletId || !video) return res.status(404).json({ error: 'Context missing' });
+
+    const signatureData = await signPaymentWithCircle({
+      walletId: user.circleWalletId,
+      videoId: video.id,
+      chunkIndex,
+      priceUSD: video.pricePerChunk.toFixed(6)
+    });
+    
+    res.json({ success: true, data: { ...signatureData, dcwAddress: user.dcwAddress } });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Signing failed' });
+  }
+});
+
+// 7. POST /api/videos/:id/stream/:chunk - Protected x402 Chunk Access
+router.post('/:id/stream/:chunk', 
+  async (req: Request, res: Response, next: NextFunction) => {
+    const videoId = getRouteParam(req.params.id) || '';
+    const chunkIndex = parseInt(getRouteParam(req.params.chunk) || '0', 10);
+    const video = await getVideoById(videoId);
+    if (!video) return res.status(404).json({ error: 'Video not found' });
+    
+    return createX402Middleware({
+      videoId,
+      chunkIndex,
+      priceUSD: video.pricePerChunk.toFixed(6),
+      creatorDcw: video.creatorDcw,
+      creatorAddress: video.creatorWallet,
+    })(req, res, next);
+  },
+  (req: Request, res: Response) => {
+    res.json({ success: true, unlocked: true, message: 'Chunk unlocked' });
+  }
+);
+
+// 8. GET /api/videos/stats - Analytics
+router.get('/stats', (req: Request, res: Response) => {
+  res.json({ success: true, data: getTransactionStats() });
+});
+
+module.exports = router;
+</file>
+
+<file path="frontend/.gitignore">
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env
+.env.*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+</file>
+
+<file path="backend/prisma/schema.prisma">
+// backend/prisma/schema.prisma
+
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String   @id @default(uuid())
+  eoaAddress      String   @unique 
+  dcwAddress      String   @unique 
+  circleWalletId  String?  
+  sessionSigner   String?  @unique 
+  
+  payments        Payment[]
+  videosCreated   Video[]
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([eoaAddress])
+  @@index([dcwAddress])
+  @@index([sessionSigner])
+}
+
+model Video {
+  id              String    @id @default(uuid())
+  title           String
+  description     String?
+  
+  hlsManifestUrl  String
+  hlsBaseUrl      String?
+  
+  // Pricing config
+  pricePerSession Decimal   @db.Decimal(10, 6)
+  sessionDuration Int       // ✅ Chunk duration in SECONDS (stores the actual seconds)
+  
+  durationSeconds Int
+  creatorAddress  String
+  creatorDcw      String
+  
+  payments        Payment[]
+  user            User?     @relation(fields: [creatorAddress], references: [eoaAddress])
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([creatorAddress])
+  @@index([createdAt, id])
+}
+
+model Payment {
+  id           String    @id @default(uuid())
+  
+  userId       String
+  videoId      String
+  sessionIndex Int
+  
+  txHash       String?
+  amount       Decimal   @db.Decimal(10, 6)
+  nonce        String?
+  
+  timestamp    DateTime  @default(now())
+  status       PaymentStatus @default(VERIFIED)
+  
+  user         User      @relation(fields: [userId], references: [id])
+  video        Video     @relation(fields: [videoId], references: [id])
+
+  @@unique([userId, videoId, sessionIndex])
+  @@index([userId, videoId, timestamp])
+  @@index([videoId, sessionIndex])
+}
+
+enum PaymentStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  REFUNDED
+}
+</file>
+
+<file path="backend/src/index.ts">
+// backend/src/index.ts
+
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import helmet from 'helmet';
+import dotenv from 'dotenv';
+import { logTransaction, getTransactionStats } from './utils/transactionLogger';
+import { getEnv } from './config/environment';
+
+
+// Load and validate environment variables FIRST
+dotenv.config();
+const env = getEnv();
+
+const app = express();
+const PORT = env.PORT;
+
+// Middleware
+app.use(helmet({ 
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+  crossOriginEmbedderPolicy: false 
+}));
+// backend/src/index.ts - Update CORS configuration
+
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001', process.env.FRONTEND_URL || ''],
+  credentials: true,
+  exposedHeaders: ['Content-Range', 'Accept-Ranges', 'Content-Length', 'Content-Type'],
+}));
+
+// Add this middleware to set proper headers for video
+app.use('/api/videos/:id/stream', (req, res, next) => {
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+});
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true }));
+
+// Request logging (production-ready)
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    console.log(`${req.method} ${req.path} - ${res.statusCode} (${duration}ms)`);
+  });
+  next();
+});
+
+// Health check
+app.get('/api/health', (req: Request, res: Response) => {
+  res.json({ 
+    status: 'ok', 
+    service: 'arcstream-backend',
+    version: '1.0.0',
+    chain: 'ARC-TESTNET',
+    timestamp: new Date().toISOString(),
+    nodeEnv: env.NODE_ENV
+  });
+});
+
+// Routes with CommonJS interop (.default for ESM exports)
+app.use('/api/wallets', require('./routes/wallets'));
+app.use('/api/videos', require('./routes/videos'));
+app.use('/api/podcasts', require('./routes/podcasts'));
+app.use('/api/media', require('./routes/media').default);
+app.use('/api/auth', require('./routes/auth').default);
+// Payment logging middleware wrapper
+app.use((req: Request, res: Response, next: NextFunction) => {
+  const originalJson = res.json.bind(res);
+  
+  res.json = (data: any) => {
+    if ((req as any).x402Payment) {
+      logTransaction({
+        resource: (req as any).x402Payment.resource || req.url,
+        segment: (req as any).x402Payment.chunk || 0,
+        amount: (req as any).x402Payment.amount || '0',
+        payer: (req as any).x402Payment.payer,
+        recipient: (req as any).x402Payment.recipient,
+        nonce: (req as any).x402Payment.nonce,
+        chain: 'ARC-TESTNET'
+      });
+    }
+    return originalJson(data);
+  };
+  
+  next();
+});
+
+// ✅ FIXED: Stats endpoint with CORRECT JSON syntax (data: {...})
+app.get('/api/stats', (req: Request, res: Response) => {
+  const stats = getTransactionStats();
+  
+  res.json({
+    success: true,
+    data: {  // ✅ CORRECT: 'data:' key before the object
+      ...stats,
+      hackathonRequirement: {
+        minTransactions: 50,
+        met: stats.totalTransactions >= 50,
+        progress: `${Math.min(100, Math.round(stats.totalTransactions / 50 * 100))}%`
+      }
+    }
+  });
+});
+
+// 404 handler
+app.use((req: Request, res: Response) => {
+  res.status(404).json({ error: 'Endpoint not found', path: req.path });
+});
+
+// Global error handler (MUST be last)
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('Unhandled error:', err);
+  
+  const isProduction = env.NODE_ENV === 'production';
+  
+  res.status(err.status || 500).json({
+    error: isProduction ? 'Internal server error' : err.message,
+    ...(isProduction ? {} : { 
+      stack: err.stack,
+      path: req.path,
+      method: req.method
+    })
+  });
+});
+
+// Start server
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🎬 ArcStream Backend`);
+  console.log(`   📡 Listening on http://0.0.0.0:${PORT}`);
+  console.log(`   🔗 API Base: /api`);
+  console.log(`   ⛓️  Chain: ARC-TESTNET`);
+  console.log(`   🌐 Frontend: ${env.FRONTEND_URL}`);
+  console.log(`   🔐 Env: ${env.NODE_ENV}`);
+});
+
+export default app;
+</file>
+
+<file path="render.yaml">
+# render.yaml - Updated with correct build commands
+services:
+  # Backend API Service
+  - type: web
+    name: arcstream-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
+    startCommand: npm start
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: arcstream-db
+          property: connectionString
+      - key: CIRCLE_API_KEY
+        sync: false
+      - key: CIRCLE_ENTITY_SECRET
+        sync: false
+      - key: CIRCLE_USDC_TOKEN_ID
+        value: 3c90c3cc-0d44-4b50-8888-8dd25736052a
+      - key: ARC_RPC_URL
+        value: https://rpc.testnet.arc.network
+      - key: USDC_CONTRACT_ADDRESS
+        value: 0x3600000000000000000000000000000000000000
+      - key: X402_FACILITATOR_URL
+        value: https://facilitator.x402.org
+      - key: FRONTEND_URL
+        value: https://arcstream-frontend.onrender.com
+      - key: PORT
+        value: "10000"
+
+  # Frontend Service
+  - type: web
+    name: arcstream-frontend
+    runtime: node
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        value: https://arcstream-backend.onrender.com/api
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://arcstream-frontend.onrender.com
+      - key: NEXT_PUBLIC_ARC_RPC_URL
+        value: https://rpc.testnet.arc.network
+      - key: NEXT_PUBLIC_USDC_CONTRACT
+        value: 0x3600000000000000000000000000000000000000
+      - key: NEXT_PUBLIC_X402_FACILITATOR
+        value: https://facilitator.x402.org
+
+databases:
+  - name: arcstream-db
+    plan: free
+</file>
+
+<file path="backend/package.json">
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "ArcStream Backend - Nano Payments Video Platform",
+  "main": "api/index.ts",
+  "scripts": {
+    "dev": "nodemon --exec tsx src/index.ts",
+    "build": "prisma generate && tsc --skipLibCheck",
+    "start": "node dist/index.js",
+    "vercel-build": "prisma generate && tsc",
+    "test": "echo No tests",
+    "migrate:data": "tsx scripts/migrate-json-to-prisma.ts",
+    "db:push": "prisma db push"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "keywords": [
+    "arc",
+    "circle",
+    "nanopayments",
+    "x402",
+    "video"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.3.0",
+    "@circle-fin/x402-batching": "^2.1.0",
+    "@prisma/adapter-pg": "^7.7.0",
+    "@prisma/client": "^7.7.0",
+    "@x402/core": "^2.10.0",
+    "@x402/evm": "^2.10.0",
+    "@x402/express": "^2.10.0",
+    "cloudinary": "^2.9.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "ethers": "^6.13.0",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "multer": "^2.1.1",
+    "p-limit": "^7.3.0",
+    "pg": "^8.20.0",
+    "prisma": "^7.7.0",
+    "siwe": "^2.3.2",
+    "uuid": "^14.0.0",
+    "viem": "^2.48.1",
+    "zod": "^3.25.76"
+  },
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^25.6.0",
+    "@types/p-limit": "^2.1.0",
+    "@types/pg": "^8.20.0",
+    "nodemon": "^3.1.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
+</file>
+
+<file path="backend/scripts/migrate-json-to-prisma.ts">
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import pg from 'pg';
+import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// 1. Load Environment Variables
+dotenv.config();
+
+// 2. ESM __dirname Fix
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// 3. Initialize Prisma with the PostgreSQL Adapter (Required for v7)
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+
+async function migrateUsers() {
+  const usersPath = path.resolve(__dirname, '../src/data/users.json');
+  
+  if (!fs.existsSync(usersPath)) {
+    console.log('⚠️ users.json not found, skipping...');
+    return;
+  }
+  
+  const users = JSON.parse(fs.readFileSync(usersPath, 'utf-8'));
+  console.log(`🔄 Migrating ${users.length} users...`);
+  
+  for (const user of users) {
+    try {
+      await prisma.user.upsert({
+        where: { eoaAddress: user.eoa },
+        update: {},
+        create: {
+          eoaAddress: user.eoa,
+          dcwAddress: user.dcwAddress,
+          circleWalletId: user.dcwWalletId || "",
+          createdAt: new Date(user.createdAt || Date.now()),
+        },
+      });
+      console.log(`✅ Migrated: ${user.eoa}`);
+    } catch (err: any) {
+      console.error(`❌ Error migrating user ${user.eoa}:`, err.message);
+    }
+  }
+}
+
+async function migrateVideos() {
+  const videosPath = path.resolve(__dirname, '../src/data/videos.json');
+  if (!fs.existsSync(videosPath)) return;
+
+  const videos = JSON.parse(fs.readFileSync(videosPath, 'utf-8'));
+  console.log(`🔄 Migrating ${videos.length} videos...`);
+
+  for (const v of videos) {
+    try {
+      await prisma.video.upsert({
+        where: { id: v.id },
+        update: {},
+        create: {
+          id: v.id,
+          title: v.title,
+          sessionDuration: v.pricingModel === 'per_5s' ? 5 : 60,
+          pricePerSession: v.pricePerChunk || 0.001,
+          creatorAddress: v.creatorWallet,
+          // Note: ensure these field names match your schema exactly
+        }
+      });
+      console.log(`✅ Migrated: ${v.title}`);
+    } catch (err: any) {
+      console.error(`❌ Error migrating video ${v.id}:`, err.message);
+    }
+  }
+}
+
+async function main() {
+  try {
+    await migrateUsers();
+    await migrateVideos();
+    console.log('🎉 Migration successful!');
+  } catch (err) {
+    console.error('💥 Global Migration Error:', err);
+  } finally {
+    await prisma.$disconnect();
+    await pool.end(); // Important to close the PG pool
+  }
+}
+
+main();
+</file>
+
+<file path="backend/src/lib/prisma.ts">
+// backend/src/lib/prisma.ts
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
+
+// For serverless, use connection pooling with smaller limits
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  max: 3, // Reduced for serverless
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+});
+
+const adapter = new PrismaPg(pool);
+
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
+
+export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  adapter,
+  log: ['error'],
+});
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
+}
+
+export default prisma;
 </file>
 
 </files>

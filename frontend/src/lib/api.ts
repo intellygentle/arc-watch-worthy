@@ -6,8 +6,7 @@ const ARC_CHAIN_ID = '5042002';
 
 export const api: AxiosInstance = axios.create({
   baseURL: API_BASE,
-  headers: { 'Content-Type': 'application/json' },
-  timeout: 30000,
+  timeout: 120000, // Increased to 120s for video upload processing
 });
 
 export interface PaymentDetails {
@@ -37,53 +36,29 @@ export const walletAPI = {
   deploy: (address: string) => api.post('/wallets/deploy', { address }),
 };
 
-
-// export const videoAPI = {
-//   list: (q?: string) => api.get(`/videos${q ? `?q=${q}` : ''}`),
-//   getVideo: (id: string) => api.get(`/videos/${id}`),
-  
-//   create: (payload: any, eoaAddress: string) => 
-//     api.post('/videos', payload, {
-//       headers: { Authorization: `Bearer ${eoaAddress}` }
-//     }),
-  
-//   signChunk: (videoId: string, chunkIndex: number, eoaAddress: string) => 
-//     api.post(`/videos/${videoId}/sign/${chunkIndex}`, {}, {
-//       headers: { Authorization: `Bearer ${eoaAddress}` }
-//     }),
-  
-//   requestChunkAccess: (videoId: string, chunkIndex: number, signedPayment?: SignedPayment) => {
-//     const headers: Record<string, string> = {};
-//     if (signedPayment) {
-//       headers['X-Payment-Authorization'] = `${signedPayment.signature}:${signedPayment.payerAddress}`;
-//       headers['X-Payment-Nonce'] = signedPayment.paymentDetails.nonce;
-//       headers['X-Payment-Price'] = signedPayment.paymentDetails.price;
-//       headers['X-Creator-Wallet'] = signedPayment.paymentDetails.recipient;
-//     }
-//     return api.post(`/videos/${videoId}/stream/${chunkIndex}`, {}, { headers });
-//   },
-  
-//   // ✅ NEW: Get paid chunks for a video
-//   getPaidChunks: (videoId: string, eoaAddress: string) =>
-//     api.get(`/videos/${videoId}/paid-chunks`, {
-//       headers: { Authorization: `Bearer ${eoaAddress}` }
-//     }),
-// };
-
-
-// frontend/src/lib/api.ts
-
 export const videoAPI = {
   list: (q?: string) => api.get(`/videos${q ? `?q=${q}` : ''}`),
   
   getVideo: (id: string) => api.get(`/videos/${id}`),
   
-  create: (payload: any, eoaAddress: string) => 
-    api.post('/videos', payload, {
-      headers: { Authorization: `Bearer ${eoaAddress}` }
-    }),
+  /**
+   * Upload video with metadata
+   * Supports FormData for Cloudinary file uploads
+   */
+  create: (payload: FormData | Record<string, any>, eoaAddress: string) => {
+    const isFormData = payload instanceof FormData;
+    
+    return api.post('/videos', payload, {
+      headers: { 
+        Authorization: `Bearer ${eoaAddress}`,
+        // Let axios set Content-Type automatically for FormData (includes boundary)
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' })
+      },
+      // Longer timeout for uploads
+      timeout: 180000, // 3 minutes
+    });
+  },
   
-  // ✅ NEW: Delete video
   delete: (videoId: string, eoaAddress: string) =>
     api.delete(`/videos/${videoId}`, {
       headers: { Authorization: `Bearer ${eoaAddress}` }
@@ -131,5 +106,27 @@ export const x402Utils = {
     };
   },
 };
+
+// Request interceptor for debugging
+api.interceptors.request.use(
+  (config) => {
+    console.log(`📤 ${config.method?.toUpperCase()} ${config.url}`, 
+      config.data instanceof FormData ? '[FormData]' : config.data);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor for debugging
+api.interceptors.response.use(
+  (response) => {
+    console.log(`📥 ${response.status} ${response.config.url}`);
+    return response;
+  },
+  (error) => {
+    console.error(`❌ API Error:`, error.response?.status, error.response?.data || error.message);
+    return Promise.reject(error);
+  }
+);
 
 export default api;

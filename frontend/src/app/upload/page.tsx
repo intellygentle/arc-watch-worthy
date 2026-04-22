@@ -1,4 +1,3 @@
-
 // frontend/src/app/upload/page.tsx
 
 'use client';
@@ -8,8 +7,8 @@ import { useWallet } from '@/components/WalletAuth';
 import { videoAPI } from '@/lib/api';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
-import { Upload as UploadIcon, FileVideo, Link2, ToggleLeft, ToggleRight, Clock, DollarSign, Settings } from 'lucide-react';
-import { appConfig, formatDuration } from '@/config/app';
+import { Upload as UploadIcon, FileVideo, Loader2, DollarSign, Settings } from 'lucide-react';
+import { formatDuration } from '@/config/app';
 
 interface UploadForm {
   title: string;
@@ -18,7 +17,6 @@ interface UploadForm {
   chunkUnit: 'seconds' | 'minutes';
   chunkValue: string;
   pricePerChunk: string;
-  videoUrl: string;
 }
 
 export default function UploadPage() {
@@ -32,34 +30,65 @@ export default function UploadPage() {
     chunkUnit: 'minutes',
     chunkValue: '5',
     pricePerChunk: '0.001',
-    videoUrl: ''
   });
   const [submitting, setSubmitting] = useState(false);
   const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [useLocalFile, setUseLocalFile] = useState(true);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setVideoFile(file);
-      
-      const video = document.createElement('video');
-      video.preload = 'metadata';
-      video.onloadedmetadata = () => {
-        const duration = Math.floor(video.duration);
-        setVideoDuration(duration);
-        setForm(prev => ({ 
-          ...prev, 
-          durationSeconds: duration.toString(),
-          title: file.name.replace(/\.[^/.]+$/, "")
-        }));
-        URL.revokeObjectURL(video.src);
-      };
-      video.src = URL.createObjectURL(file);
-      
-      const localPath = `C:/Users/${process.env.USERNAME || 'worko'}/Videos/${file.name}`;
-      setForm(prev => ({ ...prev, videoUrl: localPath }));
+      processFile(file);
+    }
+  };
+
+  const processFile = (file: File) => {
+    // Check file size (100MB limit)
+    if (file.size > 100 * 1024 * 1024) {
+      toast.error('File size must be less than 100MB');
+      return;
+    }
+    
+    setVideoFile(file);
+    
+    // Auto-extract metadata
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      const duration = Math.floor(video.duration);
+      setVideoDuration(duration);
+      setForm(prev => ({ 
+        ...prev, 
+        durationSeconds: duration.toString(),
+        title: prev.title || file.name.replace(/\.[^/.]+$/, "")
+      }));
+      URL.revokeObjectURL(video.src);
+    };
+    video.src = URL.createObjectURL(file);
+    
+    toast.success(`✅ Selected: ${file.name}`);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('video/')) {
+      processFile(file);
+    } else {
+      toast.error('Please drop a valid video file');
     }
   };
 
@@ -71,32 +100,39 @@ export default function UploadPage() {
       return;
     }
     
-    if (!form.durationSeconds || parseInt(form.durationSeconds) < 5) {
-      toast.error('Video duration must be at least 5 seconds');
+    if (!videoFile) {
+      toast.error('Please select a video file to upload');
       return;
     }
-    
+
+    if (!form.durationSeconds || parseInt(form.durationSeconds) < 1) {
+      toast.error('Please enter a valid video duration');
+      return;
+    }
+
     setSubmitting(true);
+    const loadingToast = toast.loading('Uploading to Cloudinary... This may take a minute.');
+
     try {
-      const payload = {
-        title: form.title,
-        description: form.description,
-        durationSeconds: parseInt(form.durationSeconds, 10),
-        chunkUnit: form.chunkUnit,
-        chunkValue: form.chunkValue,
-        pricePerChunk: parseFloat(form.pricePerChunk),
-        videoUrl: form.videoUrl
-      };
+      // ✅ Create FormData with the actual file
+      const formData = new FormData();
+      formData.append('video', videoFile);
+      formData.append('title', form.title);
+      formData.append('description', form.description);
+      formData.append('durationSeconds', form.durationSeconds);
+      formData.append('chunkUnit', form.chunkUnit);
+      formData.append('chunkValue', form.chunkValue);
+      formData.append('pricePerChunk', form.pricePerChunk);
+
+      const res = await videoAPI.create(formData, eoaAddress);
       
-      console.log('📤 Uploading video:', payload);
-      
-      const res = await videoAPI.create(payload, eoaAddress);
-      
-      toast.success('✅ Video listed successfully!');
+      toast.dismiss(loadingToast);
+      toast.success('✅ Video published successfully!');
       router.push(`/watch/${res.data.data.id}`);
     } catch (err: any) {
+      toast.dismiss(loadingToast);
       console.error('Upload error:', err);
-      toast.error(err.response?.data?.error || 'Failed to list video');
+      toast.error(err.response?.data?.error || 'Failed to publish video');
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +143,7 @@ export default function UploadPage() {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // Calculate preview
+  // UI Preview Logic
   const getChunkSeconds = (): number => {
     const value = parseFloat(form.chunkValue) || 5;
     return form.chunkUnit === 'minutes' ? Math.round(value * 60) : Math.round(value);
@@ -117,285 +153,178 @@ export default function UploadPage() {
   const durationSec = parseInt(form.durationSeconds) || 0;
   const totalChunks = durationSec > 0 ? Math.ceil(durationSec / chunkSeconds) : 0;
   const totalCost = totalChunks * parseFloat(form.pricePerChunk || '0.001');
-
-  const isValidChunk = chunkSeconds >= 5 && chunkSeconds <= 3600 && chunkSeconds <= durationSec;
+  const isValidChunk = chunkSeconds >= 5 && chunkSeconds <= 3600 && chunkSeconds <= (durationSec || Infinity);
 
   return (
     <main className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
       <div className="max-w-2xl mx-auto">
         <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
           <UploadIcon size={24} />
-          List Your Video
+          Publish Video
         </h1>
         
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Source Selection Toggle */}
-            <div className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                Video Source:
-              </span>
-              <button
-                type="button"
-                onClick={() => setUseLocalFile(!useLocalFile)}
-                className="flex items-center gap-2 text-blue-600 dark:text-blue-400"
+            
+            {/* File Upload Area */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Select Video File
+              </label>
+              <div 
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition cursor-pointer ${
+                  isDragging 
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                    : videoFile 
+                      ? 'border-green-500 bg-green-50 dark:bg-green-900/20' 
+                      : 'border-gray-300 dark:border-gray-600 hover:border-blue-500'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => document.getElementById('video-file')?.click()}
               >
-                {useLocalFile ? (
-                  <>
-                    <FileVideo size={16} />
-                    Local File
-                    <ToggleRight size={20} />
-                  </>
-                ) : (
-                  <>
-                    <Link2 size={16} />
-                    Remote URL
-                    <ToggleLeft size={20} />
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Local File Upload */}
-            {useLocalFile ? (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Select Video File
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-6 text-center hover:border-blue-500 transition">
-                    <input
-                      type="file"
-                      accept="video/*"
-                      onChange={handleFileChange}
-                      className="hidden"
-                      id="video-file"
-                    />
-                    <label htmlFor="video-file" className="cursor-pointer">
-                      <FileVideo size={48} className="mx-auto mb-2 text-gray-400" />
-                      <p className="text-gray-600 dark:text-gray-300">
-                        {videoFile ? videoFile.name : 'Click to select a video file'}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        MP4, WebM, MOV (max 500MB recommended)
-                      </p>
-                    </label>
-                  </div>
-                  {videoFile && (
-                    <div className="mt-2 p-2 bg-green-50 dark:bg-green-900/20 rounded text-sm">
-                      <p className="text-green-700 dark:text-green-300">
-                        ✓ Selected: {videoFile.name}
-                      </p>
-                      <p className="text-green-600 dark:text-green-400 text-xs">
-                        Size: {(videoFile.size / 1024 / 1024).toFixed(2)} MB
-                        {videoDuration && ` • Duration: ${formatDuration(videoDuration)}`}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                
-                {form.videoUrl && (
-                  <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">File Path:</p>
-                    <code className="text-xs break-all">{form.videoUrl}</code>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Public Video URL *
-                </label>
                 <input
-                  name="videoUrl"
-                  required
-                  type="url"
-                  value={form.videoUrl}
-                  onChange={handleChange}
-                  placeholder="https://example.com/video.mp4"
-                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  type="file"
+                  accept="video/*"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="video-file"
                 />
+                <FileVideo size={48} className={`mx-auto mb-3 ${videoFile ? 'text-green-500' : 'text-gray-400'}`} />
+                <p className="text-gray-700 dark:text-gray-200 font-medium">
+                  {videoFile ? videoFile.name : 'Click or drag video here'}
+                </p>
+                <p className="text-xs text-gray-500 mt-2">
+                  MP4, MOV, or WebM (Max 100MB)
+                </p>
               </div>
-            )}
+              {videoFile && (
+                <div className="flex justify-between text-xs text-blue-600 dark:text-blue-400 px-1 mt-2">
+                  <span>Size: {(videoFile.size / (1024 * 1024)).toFixed(2)} MB</span>
+                  {videoDuration && <span>Duration: {formatDuration(videoDuration)}</span>}
+                </div>
+              )}
+            </div>
 
             {/* Title */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Video Title *
-              </label>
-              <input
-                name="title"
-                required
-                value={form.title}
-                onChange={handleChange}
-                placeholder="Amazing Tutorial"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+              <input 
+                name="title" 
+                required 
+                value={form.title} 
+                onChange={handleChange} 
+                placeholder="My Awesome Video"
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" 
               />
             </div>
 
             {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Description *
-              </label>
-              <textarea
-                name="description"
-                required
-                value={form.description}
-                onChange={handleChange}
-                placeholder="Brief intro to your video content..."
-                rows={4}
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
+              <textarea 
+                name="description" 
+                required 
+                value={form.description} 
+                onChange={handleChange} 
+                rows={3} 
+                placeholder="Tell viewers about your content..."
+                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" 
               />
             </div>
 
-            {/* Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Duration (seconds) *
-              </label>
-              <input
-                name="durationSeconds"
-                required
-                type="number"
-                min="5"
-                step="1"
-                value={form.durationSeconds}
-                onChange={handleChange}
-                placeholder="300"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              />
-              {form.durationSeconds && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {formatDuration(parseInt(form.durationSeconds))}
-                </p>
-              )}
+            {/* Duration & Price */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Duration (seconds)</label>
+                <input 
+                  name="durationSeconds" 
+                  type="number" 
+                  required 
+                  value={form.durationSeconds} 
+                  onChange={handleChange} 
+                  min="1"
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" 
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
+                  <DollarSign size={14} />
+                  Price / Chunk (USDC)
+                </label>
+                <input 
+                  name="pricePerChunk" 
+                  type="number" 
+                  step="0.000001" 
+                  required 
+                  value={form.pricePerChunk} 
+                  onChange={handleChange} 
+                  min="0.000001"
+                  max="0.01"
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" 
+                />
+              </div>
             </div>
 
-            {/* Chunk Duration */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
-                <Settings size={14} />
-                Chunk Duration *
+            {/* Chunk Configuration */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+                <Settings size={16} /> Chunk Configuration
               </label>
               <div className="flex gap-2">
-                <input
-                  name="chunkValue"
-                  required
-                  type="number"
+                <input 
+                  name="chunkValue" 
+                  type="number" 
+                  value={form.chunkValue} 
+                  onChange={handleChange} 
                   min="1"
-                  step="1"
-                  value={form.chunkValue}
-                  onChange={handleChange}
-                  placeholder="5"
-                  className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" 
                 />
-                <select
-                  name="chunkUnit"
-                  value={form.chunkUnit}
-                  onChange={handleChange}
-                  className="w-32 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                <select 
+                  name="chunkUnit" 
+                  value={form.chunkUnit} 
+                  onChange={handleChange} 
+                  className="w-32 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="seconds">Seconds</option>
                   <option value="minutes">Minutes</option>
                 </select>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                {chunkSeconds >= 60 
-                  ? `${chunkSeconds / 60} minute${chunkSeconds >= 120 ? 's' : ''}`
-                  : `${chunkSeconds} second${chunkSeconds !== 1 ? 's' : ''}`} per chunk
-                {!isValidChunk && chunkSeconds > 0 && (
-                  <span className="text-red-500 ml-2">
-                    {chunkSeconds < 5 ? '(min 5 seconds)' : 
-                     chunkSeconds > 3600 ? '(max 60 minutes)' : 
-                     chunkSeconds > durationSec ? '(exceeds video duration)' : ''}
-                  </span>
+              <div className="mt-3 flex justify-between items-end">
+                <p className="text-xs text-gray-500">
+                  Total Chunks: <span className="font-bold text-blue-600">{totalChunks}</span><br /> 
+                  Total Cost: <span className="font-bold text-green-600">${totalCost.toFixed(4)} USDC</span>
+                </p>
+                {!isValidChunk && durationSec > 0 && (
+                   <p className="text-[10px] text-red-500 font-medium italic">
+                     {chunkSeconds < 5 ? 'Min 5 seconds' : 
+                      chunkSeconds > 3600 ? 'Max 60 minutes' : 
+                      'Exceeds video duration'}
+                   </p>
                 )}
-              </p>
-            </div>
-
-            {/* Price */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-1">
-                <DollarSign size={14} />
-                Price per chunk (USDC) *
-              </label>
-              <input
-                name="pricePerChunk"
-                required
-                type="number"
-                step="0.000001"
-                min="0.000001"
-                max="0.01"
-                value={form.pricePerChunk}
-                onChange={handleChange}
-                placeholder="0.001"
-                className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                ≤ $0.01 per chunk (Hackathon compliant) ✓
-              </p>
-            </div>
-
-            {/* Preview */}
-            {durationSec > 0 && isValidChunk && (
-              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                <h4 className="font-medium text-gray-900 dark:text-white mb-2">📊 Video Preview</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Total Duration</p>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {formatDuration(durationSec)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Chunk Size</p>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {formatDuration(chunkSeconds)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Total Chunks</p>
-                    <p className="font-medium text-gray-900 dark:text-white">
-                      {totalChunks} chunks
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-500 dark:text-gray-400">Price per Chunk</p>
-                    <p className="font-medium text-green-600 dark:text-green-400">
-                      ${parseFloat(form.pricePerChunk || '0.001').toFixed(6)} USDC
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-3 pt-3 border-t border-blue-200 dark:border-blue-800">
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    💰 Total cost if fully watched: 
-                    <span className="font-bold ml-1">${totalCost.toFixed(6)} USDC</span>
-                  </p>
-                </div>
               </div>
-            )}
+            </div>
 
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={submitting || !eoaAddress || !dcwAddress || (useLocalFile && !videoFile) || !isValidChunk}
-              className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-medium rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+              disabled={submitting || !eoaAddress || !videoFile || !isValidChunk}
+              className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg flex items-center justify-center gap-2"
             >
-              {submitting 
-                ? 'Publishing...' 
-                : !eoaAddress || !dcwAddress
-                  ? 'Connect Wallet to Publish' 
-                  : useLocalFile && !videoFile
-                  ? 'Select a Video File'
-                  : !isValidChunk
-                  ? 'Invalid Chunk Duration'
-                  : '🚀 Publish Video'
-              }
+              {submitting ? (
+                <>
+                  <Loader2 size={20} className="animate-spin" />
+                  Uploading to Cloudinary...
+                </>
+              ) : (
+                '🚀 Publish to ArcStream'
+              )}
             </button>
           </form>
         </div>
-
+        
+        {/* Tips */}
         <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
           <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-2">💡 Chunking Tips</h3>
           <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
