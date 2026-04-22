@@ -53,8 +53,6 @@ const getAuthenticatedUser = (req: Request) => {
 
 // --- ROUTES ---
 
-// backend/src/routes/videos.ts
-
 // Generate upload token for direct browser upload
 router.post('/upload-token', async (req: Request, res: Response) => {
   try {
@@ -74,13 +72,14 @@ router.post('/upload-token', async (req: Request, res: Response) => {
     const safeFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
     const blobPath = `videos/${timestamp}-${safeFilename}`;
 
-    // Return the token and path for client-side upload
+    // ✅ Return the token, path, AND the full upload URL
     res.json({
       success: true,
       data: {
         token: process.env.BLOB_READ_WRITE_TOKEN,
         path: blobPath,
         contentType: contentType || 'video/mp4',
+        uploadUrl: `https://blob.vercel-storage.com/${blobPath}`,
       }
     });
   } catch (err: any) {

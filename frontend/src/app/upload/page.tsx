@@ -1,7 +1,7 @@
 // frontend/src/app/upload/page.tsx
 
 'use client';
-import { put } from '@vercel/blob';
+
 import { useState, ChangeEvent, FormEvent } from 'react';
 import { useWallet } from '@/components/WalletAuth';
 import { videoAPI } from '@/lib/api';
@@ -38,6 +38,7 @@ export default function UploadPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -46,21 +47,37 @@ export default function UploadPage() {
     }
   };
 
-
+  // ✅ CORRECT client-side upload to Vercel Blob using fetch
   const uploadDirectToBlob = async (file: File): Promise<string> => {
-  // 1. Get upload token from backend
-  const tokenRes = await videoAPI.getUploadToken(file.name, file.type, eoaAddress!);
-  const { token, path, contentType } = tokenRes.data.data;
+    console.log('📤 Getting upload token...');
+    
+    // 1. Get upload token from backend
+    const tokenRes = await videoAPI.getUploadToken(file.name, file.type, eoaAddress!);
+    const { token, path, contentType, uploadUrl } = tokenRes.data.data;
+    
+    console.log('✅ Token received, uploading directly to Vercel Blob...');
+    console.log('   Upload URL:', uploadUrl);
+    
+    // 2. Upload using fetch with the correct headers
+    const response = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': contentType,
+      },
+      body: file,
+    });
 
-  // 2. Upload directly to Vercel Blob (bypasses Render!)
-  const blob = await put(path, file, {
-    access: 'public',
-    contentType,
-    token,
-  });
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Upload failed:', response.status, errorText);
+      throw new Error(`Upload failed: ${response.status}`);
+    }
 
-  return blob.url;
-};
+    const result = await response.json();
+    console.log('✅ Blob upload complete:', result.url);
+    return result.url;
+  };
 
   const processFile = (file: File) => {
     // Check file size (5GB limit with Vercel Blob)
@@ -112,54 +129,56 @@ export default function UploadPage() {
     }
   };
 
-const handleSubmit = async (e: FormEvent) => {
-  e.preventDefault();
-  
-  if (!eoaAddress || !dcwAddress) {
-    toast.error('Connect wallet first');
-    return;
-  }
-  
-  if (!videoFile) {
-    toast.error('Please select a video file to upload');
-    return;
-  }
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    
+    if (!eoaAddress || !dcwAddress) {
+      toast.error('Connect wallet first');
+      return;
+    }
+    
+    if (!videoFile) {
+      toast.error('Please select a video file to upload');
+      return;
+    }
 
-  setSubmitting(true);
-  const sizeMB = (videoFile.size / (1024 * 1024)).toFixed(2);
-  const loadingToast = toast.loading(`Uploading directly to Vercel Blob (${sizeMB} MB)...`);
+    setSubmitting(true);
+    setUploadProgress(0);
+    const sizeMB = (videoFile.size / (1024 * 1024)).toFixed(2);
+    const loadingToast = toast.loading(`Uploading directly to Vercel Blob (${sizeMB} MB)...`);
 
-  try {
-    // ✅ Upload directly from browser to Vercel Blob
-    const videoUrl = await uploadDirectToBlob(videoFile);
-    
-    toast.dismiss(loadingToast);
-    toast.success('✅ Upload complete! Creating video...');
-    
-    // Create video record
-    const createToast = toast.loading('Saving video...');
-    const res = await videoAPI.confirmUpload({
-      videoUrl,
-      title: form.title,
-      description: form.description,
-      durationSeconds: form.durationSeconds,
-      chunkUnit: form.chunkUnit,
-      chunkValue: form.chunkValue,
-      pricePerChunk: form.pricePerChunk,
-    }, eoaAddress);
-    
-    toast.dismiss(createToast);
-    toast.success('✅ Video published successfully!');
-    router.push(`/watch/${res.data.data.id}`);
-    
-  } catch (err: any) {
-    toast.dismiss(loadingToast);
-    console.error('Upload error:', err);
-    toast.error(err.response?.data?.error || 'Failed to publish video');
-  } finally {
-    setSubmitting(false);
-  }
-};
+    try {
+      // ✅ Upload directly from browser to Vercel Blob
+      const videoUrl = await uploadDirectToBlob(videoFile);
+      
+      toast.dismiss(loadingToast);
+      toast.success('✅ Upload complete! Saving video...');
+      
+      // Create video record
+      const createToast = toast.loading('Saving video...');
+      const res = await videoAPI.confirmUpload({
+        videoUrl,
+        title: form.title,
+        description: form.description,
+        durationSeconds: form.durationSeconds,
+        chunkUnit: form.chunkUnit,
+        chunkValue: form.chunkValue,
+        pricePerChunk: form.pricePerChunk,
+      }, eoaAddress);
+      
+      toast.dismiss(createToast);
+      toast.success('✅ Video published successfully!');
+      router.push(`/watch/${res.data.data.id}`);
+      
+    } catch (err: any) {
+      toast.dismiss(loadingToast);
+      console.error('Upload error:', err);
+      toast.error(err.response?.data?.error || err.message || 'Failed to publish video');
+    } finally {
+      setSubmitting(false);
+      setUploadProgress(0);
+    }
+  };
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -222,7 +241,7 @@ const handleSubmit = async (e: FormEvent) => {
                   {videoFile ? videoFile.name : 'Click or drag video here'}
                 </p>
                 <p className="text-xs text-gray-500 mt-2">
-                  MP4, MOV, or WebM (Up to 5GB with Vercel Blob)
+                  MP4, MOV, or WebM (Up to 5GB direct upload)
                 </p>
               </div>
               {videoFile && !submitting && (
@@ -232,6 +251,23 @@ const handleSubmit = async (e: FormEvent) => {
                 </div>
               )}
             </div>
+
+            {/* Upload Progress */}
+            {submitting && (
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                    Uploading directly to Vercel Blob...
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-blue-600 animate-pulse w-full" />
+                </div>
+                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
+                  Large files may take a few minutes. Please don't close this page.
+                </p>
+              </div>
+            )}
 
             {/* Title */}
             <div>

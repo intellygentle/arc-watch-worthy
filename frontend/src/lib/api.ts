@@ -98,7 +98,6 @@ export const videoAPI = {
     api.post('/videos/confirm-upload', data, {
       headers: { Authorization: `Bearer ${eoaAddress}` }
     }),
-
 };
 
 export const x402Utils = {
