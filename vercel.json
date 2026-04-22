@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/**/*.ts": {
+    "backend/api/index.ts": {
       "maxDuration": 30,
       "memory": 1024
     }
@@ -8,33 +8,21 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "/api/:path*"
+      "destination": "https://arcstream-backend.onrender.com/api/:path*"
     },
     {
-      "source": "/(.*)",
-      "destination": "/$1"
+      "source": "/:path*",
+      "destination": "/:path*"
     }
   ],
   "headers": [
     {
       "source": "/api/(.*)",
       "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "X-Requested-With, Content-Type, Authorization, Range, X-Payment-Authorization, X-Payment-Nonce, X-Payment-Price, X-Creator-Wallet"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        }
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "X-Requested-With, Content-Type, Authorization, Range" },
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
       ]
     }
   ]
