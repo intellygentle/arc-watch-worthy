@@ -258,6 +258,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
   if (!authenticatedUser?.eoaAddress) return res.status(401).json({ error: 'Auth required' });
 
   try {
+    // ✅ Use Prisma directly since getVideoById returns transformed object
     const video = await prisma.video.findUnique({ where: { id: videoId } });
     if (!video) return res.status(404).json({ error: 'Video not found' });
     
@@ -268,8 +269,8 @@ router.delete('/:id', async (req: Request, res: Response) => {
     // Optional: Delete from Vercel Blob
     try {
       if (process.env.BLOB_READ_WRITE_TOKEN) {
-        await del(video.videoUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
-        console.log('🗑️ Deleted from Vercel Blob:', video.videoUrl);
+        await del(video.hlsManifestUrl, { token: process.env.BLOB_READ_WRITE_TOKEN });
+        console.log('🗑️ Deleted from Vercel Blob:', video.hlsManifestUrl);
       }
     } catch (blobErr) {
       console.warn('⚠️ Could not delete from Vercel Blob:', blobErr);
