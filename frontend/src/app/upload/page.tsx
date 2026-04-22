@@ -5,7 +5,7 @@
 import { useState, ChangeEvent, FormEvent } from 'react';
 import { useWallet } from '@/components/WalletAuth';
 import { videoAPI } from '@/lib/api';
-import { upload } from '@vercel/blob/client';  // ✅ Correct client-side import
+import { upload } from '@vercel/blob/client';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { Upload as UploadIcon, FileVideo, Loader2, DollarSign, Settings } from 'lucide-react';
@@ -20,7 +20,6 @@ interface UploadForm {
   pricePerChunk: string;
 }
 
-// ✅ Updated to 5GB for Vercel Blob
 const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
 
 export default function UploadPage() {
@@ -49,22 +48,16 @@ export default function UploadPage() {
 
   // ✅ CORRECT client-side upload using Vercel Blob client
   const uploadDirectToBlob = async (file: File): Promise<string> => {
-    console.log('📤 Getting upload token...');
+    console.log('📤 Starting client upload to Vercel Blob...');
     
-    // 1. Get upload token and client payload from backend
-    const tokenRes = await videoAPI.getUploadToken(file.name, file.type, eoaAddress!);
-    const { clientPayload } = tokenRes.data.data;
-    
-    console.log('✅ Token received, uploading with Vercel Blob client...');
-    
-    // 2. Use the client upload method with the payload from backend
+    // ✅ Use the upload function with handleUploadUrl as a STRING (not a function)
     const blob = await upload(file.name, file, {
       access: 'public',
-      handleUploadUrl: (url: any) => {
-        console.log('📤 Uploading to:', url);
-        return url as any;
-      },
-      ...clientPayload, // Spread the client payload from backend
+      handleUploadUrl: `${process.env.NEXT_PUBLIC_API_URL}/videos/upload-token`, // ✅ URL string!
+      clientPayload: JSON.stringify({
+        eoaAddress: eoaAddress,
+        filename: file.name,
+      }),
     });
 
     console.log('✅ Blob upload complete:', blob.url);
@@ -134,7 +127,7 @@ export default function UploadPage() {
 
     setSubmitting(true);
     const sizeMB = (videoFile.size / (1024 * 1024)).toFixed(2);
-    const loadingToast = toast.loading(`Uploading directly to Vercel Blob (${sizeMB} MB)...`);
+    const loadingToast = toast.loading(`Uploading ${sizeMB} MB to Vercel Blob...`);
 
     try {
       const videoUrl = await uploadDirectToBlob(videoFile);
@@ -160,7 +153,7 @@ export default function UploadPage() {
     } catch (err: any) {
       toast.dismiss(loadingToast);
       console.error('Upload error:', err);
-      toast.error(err.response?.data?.error || err.message || 'Failed to publish video');
+      toast.error(err.message || 'Failed to publish video');
     } finally {
       setSubmitting(false);
     }
@@ -225,7 +218,7 @@ export default function UploadPage() {
                   {videoFile ? videoFile.name : 'Click or drag video here'}
                 </p>
                 <p className="text-xs text-gray-500 mt-2">
-                  MP4, MOV, or WebM (Up to 5GB direct upload)
+                  MP4, MOV, or WebM (Up to 5GB)
                 </p>
               </div>
               {videoFile && !submitting && (
@@ -240,15 +233,12 @@ export default function UploadPage() {
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
-                    Uploading directly to Vercel Blob...
+                    Uploading to Vercel Blob...
                   </span>
                 </div>
                 <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                   <div className="h-full bg-blue-600 animate-pulse w-full" />
                 </div>
-                <p className="text-xs text-blue-600 dark:text-blue-400 mt-2">
-                  Large files may take a few minutes. Please don't close this page.
-                </p>
               </div>
             )}
 
@@ -361,23 +351,13 @@ export default function UploadPage() {
               {submitting ? (
                 <>
                   <Loader2 size={20} className="animate-spin" />
-                  Uploading to Vercel Blob...
+                  Uploading...
                 </>
               ) : (
                 '🚀 Publish to ArcStream'
               )}
             </button>
           </form>
-        </div>
-        
-        <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
-          <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-2">💡 Upload Tips</h3>
-          <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
-            <li>• Maximum file size: 5GB (Vercel Blob)</li>
-            <li>• Minimum chunk: 5 seconds</li>
-            <li>• Maximum chunk: 60 minutes (3600 seconds)</li>
-            <li>• First chunk is always free for preview</li>
-          </ul>
         </div>
       </div>
     </main>

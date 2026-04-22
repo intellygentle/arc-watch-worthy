@@ -11,6 +11,9 @@ import { Readable } from 'stream';
 import { signPaymentWithCircle } from '../services/nanopaymentsService';
 import { put, del } from '@vercel/blob';
 import multer from 'multer';
+import { handleUpload } from '@vercel/blob/client';
+import type { HandleUploadBody } from '@vercel/blob/client';
+
 
 
 const router = express.Router();
@@ -55,6 +58,7 @@ const getAuthenticatedUser = (req: Request) => {
 // --- ROUTES ---
 
 // Generate upload token for direct browser upload
+// ✅ Client upload handler endpoint
 router.post('/upload-token', async (req: Request, res: Response) => {
   try {
     const authenticatedUser = getAuthenticatedUser(req);
@@ -62,31 +66,44 @@ router.post('/upload-token', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required.' });
     }
 
-    const { filename, contentType } = req.body;
-    
     if (!process.env.BLOB_READ_WRITE_TOKEN) {
       return res.status(500).json({ error: 'Blob storage not configured' });
     }
 
-    // Generate a unique path for the upload
-    const timestamp = Date.now();
-    const safeFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const blobPath = `videos/${timestamp}-${safeFilename}`;
+    const body = req.body as HandleUploadBody;
 
-    // ✅ Return the token and path for client-side upload
-    res.json({
-      success: true,
-      data: {
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-        path: blobPath,
-        contentType: contentType || 'video/mp4',
-      }
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
+      token: process.env.BLOB_READ_WRITE_TOKEN,
+      onBeforeGenerateToken: async (pathname, clientPayload) => {
+        // Generate a clean pathname
+        const timestamp = Date.now();
+        const safePath = `videos/${timestamp}-${pathname.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+        
+        return {
+          pathname: safePath,
+          allowedContentTypes: ['video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'],
+          maximumSizeInBytes: 5 * 1024 * 1024 * 1024, // 5GB
+        };
+      },
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        console.log('✅ Upload completed:', blob.url);
+        // The actual video record is created in confirm-upload endpoint
+      },
     });
+
+    return res.status(200).json(jsonResponse);
   } catch (err: any) {
     console.error('Upload token error:', err);
-    res.status(500).json({ error: err.message });
+    return res.status(400).json({ error: err.message });
   }
 });
+
+
+
+
+
 // Confirm upload and create video record
 router.post('/confirm-upload', async (req: Request, res: Response) => {
   try {
