@@ -1,21 +1,27 @@
+/* src/app/globals.css */
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Arc & Circle Brand Colors */
+  --jelly: #8656EF;           /* Circle's signature purple */
+  --licorice: #1F1A31;        /* Deep space dark background */
+  --arc-teal: #00C8B3;        /* Arc network accent */
+  --success-green: #22C55E;   /* Payment success */
+  --warning-amber: #F59E0B;   /* Payment pending */
+  
+  /* Light mode */
+  --background: #FFFFFF;
+  --foreground: #1F1A31;
+  --card-bg: #F8F9FC;
+  --border-light: #E2E8F0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #1F1A31;
+    --foreground: #F8F9FC;
+    --card-bg: #2D2440;
+    --border-light: #3D3458;
   }
 }
 
@@ -25,15 +31,54 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* Glassmorphism effect for modals/cards */
+.glass-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(134, 86, 239, 0.2);
+  box-shadow: 0 8px 32px rgba(31, 26, 49, 0.3);
+}
+
+/* Glow effect for primary buttons */
+.glow-button {
+  background: linear-gradient(135deg, #8656EF 0%, #00C8B3 100%);
+  box-shadow: 0 0 20px rgba(134, 86, 239, 0.4);
+  transition: all 0.3s ease;
+}
+
+.glow-button:hover {
+  box-shadow: 0 0 30px rgba(134, 86, 239, 0.6);
+  transform: translateY(-2px);
+}
+
+/* Retro grid background */
+.retro-grid-bg {
+  background-image: 
+    linear-gradient(rgba(134, 86, 239, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(134, 86, 239, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Animated gradient for payment success */
+@keyframes success-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.02); }
+}
+
+.payment-success-animation {
+  animation: success-pulse 0.5s ease-in-out;
+}
+
+/* Circular progress for chunks */
+.chunk-circle {
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+/* Smooth slide animations */
 @keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-slide-up {
@@ -41,14 +86,8 @@ body {
 }
 
 @keyframes slide-in {
-  from {
-    opacity: 0;
-    transform: translateX(-10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .animate-slide-in {

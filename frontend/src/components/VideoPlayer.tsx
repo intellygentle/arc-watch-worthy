@@ -22,6 +22,54 @@ interface VideoPlayerProps {
   onPaymentError?: (error: string) => void;
 }
 
+// Circular Chunk Progress Indicator - Nod to "Circle" brand
+const CircularChunkProgress: React.FC<{
+  current: number;
+  total: number;
+  unlocked: Set<number>;
+}> = ({ current, total, unlocked }) => {
+  const radius = 18;
+  const circumference = 2 * Math.PI * radius;
+  const progress = ((current + 1) / total) * 100;
+  const strokeDashoffset = circumference - (progress / 100) * circumference;
+  
+  return (
+    <div className="relative w-9 h-9">
+      <svg className="w-full h-full -rotate-90">
+        <circle
+          cx="18"
+          cy="18"
+          r={radius}
+          fill="none"
+          stroke="#3D3458"
+          strokeWidth="2.5"
+        />
+        <circle
+          cx="18"
+          cy="18"
+          r={radius}
+          fill="none"
+          stroke="url(#chunkGradient)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          className="chunk-circle"
+        />
+        <defs>
+          <linearGradient id="chunkGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#8656EF" />
+            <stop offset="100%" stopColor="#00C8B3" />
+          </linearGradient>
+        </defs>
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold text-white">
+        {current + 1}/{total}
+      </div>
+    </div>
+  );
+};
+
 export default function VideoPlayer({
   videoId,
   videoUrl,
@@ -247,7 +295,6 @@ export default function VideoPlayer({
       const signRes = await videoAPI.signChunk(videoId, chunkIndex, viewerWallet!);
       const { signature, nonce } = signRes.data.data;
       
-      // ✅ Use viewerDcw (DCW address) as payerAddress, NOT viewerWallet (EOA)
       const signedPayment: SignedPayment = {
         signature,
         paymentDetails: { ...paymentDetails, nonce },
@@ -496,7 +543,7 @@ export default function VideoPlayer({
   const maxUnlockedTime = Math.min((lastPaidChunk + 1) * chunkSeconds, durationSeconds);
 
   return (
-    <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-2xl">
+    <div className="relative w-full aspect-video bg-[#1F1A31] rounded-xl overflow-hidden shadow-2xl border border-[#3D3458]">
       <video
         ref={videoRef}
         className="w-full h-full"
@@ -516,64 +563,64 @@ export default function VideoPlayer({
       
       {/* Loading overlay */}
       {isLoading && !videoError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-[#1F1A31]/80 backdrop-blur-sm z-10">
           <div className="text-center">
-            <Loader2 className="animate-spin text-white mx-auto mb-2" size={48} />
-            <p className="text-white text-sm font-medium">Loading video...</p>
+            <Loader2 className="animate-spin text-[#8656EF] mx-auto mb-2" size={48} />
+            <p className="text-white text-sm font-medium">Loading watch-worthy content...</p>
           </div>
         </div>
       )}
       
       {/* Error overlay */}
       {videoError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 z-10">
+        <div className="absolute inset-0 flex items-center justify-center bg-[#1F1A31] z-10">
           <div className="text-center p-6">
-            <AlertCircle className="mx-auto mb-4 text-red-500" size={48} />
+            <AlertCircle className="mx-auto mb-4 text-red-400" size={48} />
             <p className="text-white mb-4">{videoError}</p>
-            <button onClick={handleRetry} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg">
+            <button onClick={handleRetry} className="glow-button px-4 py-2 text-white rounded-lg">
               <RotateCcw size={16} className="inline mr-2" /> Retry
             </button>
           </div>
         </div>
       )}
       
-      {/* Regular payment overlay */}
+      {/* Regular payment overlay with glassmorphism */}
       {paymentStatus === 'pending' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/70 z-30">
-          <div className="bg-gray-800 rounded-xl p-6 text-center">
-            <Loader2 className="animate-spin mx-auto mb-3 text-blue-500" size={32} />
+        <div className="absolute inset-0 flex items-center justify-center bg-[#1F1A31]/70 backdrop-blur-sm z-30">
+          <div className="glass-card rounded-xl p-6 text-center">
+            <Loader2 className="animate-spin mx-auto mb-3 text-[#8656EF]" size={32} />
             <p className="text-white text-lg mb-1 font-medium">Processing Payment</p>
-            <p className="text-gray-400">{formatUSDC(pricePerChunk)} USDC</p>
+            <p className="text-[#00C8B3] font-mono">{formatUSDC(pricePerChunk)} USDC</p>
           </div>
         </div>
       )}
       
       {/* Auto-pay processing indicator */}
       {isAutoPaying && (
-        <div className="absolute top-4 right-4 bg-amber-500/90 text-white px-3 py-1.5 rounded-full z-40 shadow-lg flex items-center gap-2">
+        <div className="absolute top-4 right-4 bg-gradient-to-r from-[#8656EF]/90 to-[#00C8B3]/90 text-white px-3 py-1.5 rounded-full z-40 shadow-lg flex items-center gap-2">
           <Loader2 className="animate-spin" size={14} />
-          <span className="text-xs font-medium">Auto-paying next chunk...</span>
+          <span className="text-xs font-medium">Auto-paying...</span>
         </div>
       )}
       
       {/* Locked chunk indicator */}
       {needsPayment && !isCurrentChunkPaid && paymentStatus === 'idle' && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-yellow-500 text-black px-4 py-2 rounded-lg z-20 shadow-lg flex items-center gap-2">
-          <Lock size={16} />
-          <span className="font-medium">Press play to unlock • {formatUSDC(pricePerChunk)} USDC</span>
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 glass-card px-4 py-2 rounded-lg z-20 shadow-lg flex items-center gap-2">
+          <Lock size={16} className="text-[#F59E0B]" />
+          <span className="font-medium text-white">Press play to unlock • {formatUSDC(pricePerChunk)} USDC</span>
         </div>
       )}
       
       {/* Controls overlay */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-[#1F1A31] via-[#1F1A31]/80 to-transparent">
         {/* Progress bar */}
-        <div className="relative w-full h-2 bg-gray-600/80 rounded-full mb-3 overflow-hidden">
+        <div className="relative w-full h-2 bg-[#3D3458] rounded-full mb-3 overflow-hidden">
           <div 
-            className="absolute h-full bg-green-500/40" 
+            className="absolute h-full bg-[#22C55E]/30" 
             style={{ width: `${(maxUnlockedTime / durationSeconds) * 100}%` }}
           />
           <div 
-            className="absolute h-full bg-blue-500 transition-all duration-300" 
+            className="absolute h-full bg-gradient-to-r from-[#8656EF] to-[#00C8B3] transition-all duration-300" 
             style={{ width: `${progressPercent}%` }}
           />
           <input
@@ -591,7 +638,7 @@ export default function VideoPlayer({
             <button
               onClick={handlePlayPause}
               disabled={!ready || paymentStatus === 'pending'}
-              className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full text-white disabled:opacity-50 transition shadow-lg"
+              className="w-12 h-12 flex items-center justify-center bg-[#2D2440]/80 hover:bg-[#3D3458] rounded-full text-white disabled:opacity-50 transition shadow-lg"
             >
               {!ready || isLoading ? (
                 <Loader2 className="animate-spin" size={22} />
@@ -605,6 +652,13 @@ export default function VideoPlayer({
             <span className="text-sm text-white font-mono font-medium">
               {formatTime(currentTime)} / {formatTime(durationSeconds)}
             </span>
+            
+            {/* Circular Progress - Nod to Circle brand */}
+            <CircularChunkProgress 
+              current={currentChunk} 
+              total={totalChunks} 
+              unlocked={unlockedChunks} 
+            />
           </div>
           
           <div className="flex items-center gap-3">
@@ -613,8 +667,8 @@ export default function VideoPlayer({
               onClick={toggleAutoPay}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-lg ${
                 autoPayEnabled 
-                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  ? 'bg-gradient-to-r from-[#8656EF] to-[#00C8B3] text-white' 
+                  : 'bg-[#2D2440] text-gray-300 hover:bg-[#3D3458]'
               }`}
               title={autoPayEnabled ? 'Auto-pay enabled - click to disable' : 'Auto-pay disabled - click to enable'}
             >
@@ -631,8 +685,8 @@ export default function VideoPlayer({
               )}
             </button>
             
-            <span className="text-xs text-gray-300 bg-black/30 px-2 py-1 rounded-full">
-              Chunk {currentChunk + 1}/{totalChunks} • {formatDuration(chunkSeconds)}
+            <span className="text-xs text-gray-300 bg-[#2D2440] px-2 py-1 rounded-full">
+              {formatDuration(chunkSeconds)}
             </span>
           </div>
         </div>
@@ -644,10 +698,10 @@ export default function VideoPlayer({
               key={i}
               className={`flex-1 h-1.5 rounded-full transition-all duration-200 cursor-pointer ${
                 unlockedChunks.has(i) 
-                  ? 'bg-green-500 hover:bg-green-400 shadow-sm shadow-green-500/50' 
+                  ? 'bg-gradient-to-r from-[#22C55E] to-[#00C8B3] hover:opacity-80 shadow-sm' 
                   : i === currentChunk 
-                    ? 'bg-yellow-500 shadow-sm shadow-yellow-500/50' 
-                    : 'bg-gray-600 hover:bg-gray-500'
+                    ? 'bg-[#F59E0B] shadow-sm' 
+                    : 'bg-[#3D3458] hover:bg-[#4D4468]'
               }`}
               onClick={() => {
                 if (unlockedChunks.has(i) && videoRef.current) {
@@ -662,7 +716,7 @@ export default function VideoPlayer({
             />
           ))}
           {totalChunks > 30 && (
-            <span className="text-xs text-gray-400 ml-1 bg-black/30 px-1.5 py-0.5 rounded-full">+{totalChunks - 30}</span>
+            <span className="text-xs text-gray-400 ml-1 bg-[#2D2440] px-1.5 py-0.5 rounded-full">+{totalChunks - 30}</span>
           )}
         </div>
       </div>

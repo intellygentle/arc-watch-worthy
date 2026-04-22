@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Share2, Heart, MessageCircle, Loader2, AlertCircle, Trash2 } from 'lucide-react';
+import { ArrowLeft, Share2, Heart, MessageCircle, Loader2, AlertCircle, Trash2, Clock, DollarSign, Layers, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { videoAPI } from '@/lib/api';
 import { useWallet } from '@/components/WalletAuth';
@@ -98,10 +98,10 @@ export default function WatchPage() {
   
   if (loading) {
     return (
-      <main className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 flex items-center justify-center">
+      <main className="min-h-screen bg-[#1F1A31] p-4 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="animate-spin mx-auto mb-4 text-blue-600" size={40} />
-          <p className="text-gray-600 dark:text-gray-300">Loading video...</p>
+          <Loader2 className="animate-spin mx-auto mb-4 text-[#8656EF]" size={48} />
+          <p className="text-gray-300">Loading watch-worthy content...</p>
         </div>
       </main>
     );
@@ -109,14 +109,14 @@ export default function WatchPage() {
   
   if (error || !video) {
     return (
-      <main className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 flex items-center justify-center">
+      <main className="min-h-screen bg-[#1F1A31] p-4 flex items-center justify-center">
         <div className="text-center max-w-md">
-          <AlertCircle className="mx-auto mb-4 text-red-500" size={48} />
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Video Not Found</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">{error || "The video you're looking for doesn't exist."}</p>
+          <AlertCircle className="mx-auto mb-4 text-red-400" size={48} />
+          <h2 className="text-xl font-bold text-white mb-2">Video Not Found</h2>
+          <p className="text-gray-400 mb-6">{error || "The video you're looking for doesn't exist."}</p>
           <Link 
             href="/" 
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            className="inline-flex items-center gap-2 glow-button px-5 py-2.5 text-white rounded-xl"
           >
             <ArrowLeft size={16} />
             Back to Feed
@@ -126,41 +126,40 @@ export default function WatchPage() {
     );
   }
   
-  // ✅ Calculate chunks using chunkDurationSeconds
   const { chunkSeconds, totalChunks } = calculateVideoChunks(
     video.durationSeconds, 
     video.chunkDurationSeconds
   );
   
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="sticky top-0 z-50 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-b border-gray-200 dark:border-gray-700">
+    <main className="min-h-screen bg-[#1F1A31] retro-grid-bg">
+      <header className="sticky top-0 z-50 glass-card border-b border-[#3D3458]">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link 
             href="/" 
-            className="flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:text-blue-600 transition"
+            className="flex items-center gap-2 text-gray-300 hover:text-white transition"
           >
             <ArrowLeft size={20} />
-            <span className="font-medium">Back</span>
+            <span className="font-medium">Back to Feed</span>
           </Link>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             {isCreator && (
               <button
                 onClick={() => setShowDeleteConfirm(true)}
-                className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
+                className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition"
                 title="Delete video"
               >
                 <Trash2 size={20} />
               </button>
             )}
-            <button className="p-2 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition">
+            <button className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition">
               <Heart size={20} />
             </button>
-            <button className="p-2 text-gray-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition">
+            <button className="p-2 text-gray-400 hover:text-[#8656EF] hover:bg-[#8656EF]/10 rounded-lg transition">
               <MessageCircle size={20} />
             </button>
-            <button className="p-2 text-gray-500 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition">
+            <button className="p-2 text-gray-400 hover:text-[#00C8B3] hover:bg-[#00C8B3]/10 rounded-lg transition">
               <Share2 size={20} />
             </button>
           </div>
@@ -170,22 +169,25 @@ export default function WatchPage() {
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
         <WalletAuth />
         
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{video.title}</h1>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">{video.description}</p>
+        <div className="glass-card rounded-2xl p-6">
+          <h1 className="text-2xl font-bold text-white mb-2">{video.title}</h1>
+          <p className="text-gray-300 mb-4">{video.description}</p>
           
-          <div className="flex flex-wrap items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
-            <span className="flex items-center gap-1">
-              ⏱️ {formatDuration(video.durationSeconds)} total
+          <div className="flex flex-wrap items-center gap-5 text-sm">
+            <span className="flex items-center gap-2 text-gray-400 bg-[#2D2440] px-3 py-1.5 rounded-full">
+              <Clock size={14} className="text-[#8656EF]" />
+              {formatDuration(video.durationSeconds)} total
             </span>
-            <span className="flex items-center gap-1">
-              💰 {formatUSDC(video.pricePerChunk)} / {formatDuration(video.chunkDurationSeconds)}
+            <span className="flex items-center gap-2 text-gray-400 bg-[#2D2440] px-3 py-1.5 rounded-full">
+              <DollarSign size={14} className="text-[#00C8B3]" />
+              <span className="text-white font-medium">{formatUSDC(video.pricePerChunk)}</span> / {formatDuration(video.chunkDurationSeconds)}
             </span>
-            <span className="flex items-center gap-1">
-              🔢 {totalChunks} chunk{totalChunks !== 1 ? 's' : ''}
+            <span className="flex items-center gap-2 text-gray-400 bg-[#2D2440] px-3 py-1.5 rounded-full">
+              <Layers size={14} className="text-[#8656EF]" />
+              {totalChunks} chunk{totalChunks !== 1 ? 's' : ''}
             </span>
-            <span className="flex items-center gap-1 text-green-600 dark:text-green-400 font-medium">
-              ✓ ≤ $0.01/chunk (Hackathon Compliant)
+            <span className="flex items-center gap-1 text-[#22C55E] bg-[#22C55E]/10 px-3 py-1.5 rounded-full text-xs font-medium">
+              ✓ First chunk FREE
             </span>
           </div>
         </div>
@@ -205,60 +207,56 @@ export default function WatchPage() {
             onPaymentError={handlePaymentError}
           />
         ) : (
-          <div className="aspect-video bg-gray-200 dark:bg-gray-700 rounded-xl flex items-center justify-center">
-            <p className="text-gray-500 dark:text-gray-400 text-center px-8">
-              🔐 Connect your wallet above to start watching with nanopayments
-            </p>
+          <div className="aspect-video bg-[#1F1A31] border border-[#3D3458] rounded-xl flex items-center justify-center">
+            <div className="text-center px-8">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#2D2440] flex items-center justify-center">
+                <LockIcon />
+              </div>
+              <p className="text-white text-lg font-medium mb-2">Connect Your Wallet</p>
+              <p className="text-gray-400">Sign in above to start watching with nanopayments</p>
+            </div>
           </div>
         )}
         
         {paymentLog.length > 0 && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
-            <h3 className="font-semibold text-gray-900 dark:text-white mb-3">Payment History</h3>
+          <div className="glass-card rounded-xl p-5">
+            <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
+              <DollarSign size={18} className="text-[#00C8B3]" />
+              Payment History
+            </h3>
             <div className="space-y-2 max-h-40 overflow-y-auto">
               {paymentLog.map((payment, idx) => (
-                <div key={idx} className="flex items-center justify-between text-sm p-2 bg-gray-50 dark:bg-gray-700/50 rounded">
-                  <span className="text-gray-600 dark:text-gray-300">
-                    Chunk {payment.chunk + 1} ({formatDuration(chunkSeconds)})
+                <div key={idx} className="flex items-center justify-between text-sm p-3 bg-[#2D2440] rounded-lg">
+                  <span className="text-gray-300">
+                    Chunk {payment.chunk + 1} <span className="text-gray-500">({formatDuration(chunkSeconds)})</span>
                   </span>
-                  <span className="font-mono font-medium text-green-600 dark:text-green-400">
+                  <span className="font-mono font-medium text-[#22C55E]">
                     -{payment.amount} USDC
                   </span>
                 </div>
               ))}
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
-              💡 Hackathon Requirement: 50+ on-chain transactions achieved via granular chunks.
+            <p className="text-xs text-gray-400 mt-4 flex items-center gap-1">
+              <Info size={12} />
+              You&apos;ve unlocked {paymentLog.length} chunk{paymentLog.length !== 1 ? 's' : ''} so far
             </p>
           </div>
         )}
-        
-        {/* Debug Link */}
-        <div className="text-right">
-          <a
-            href={`http://localhost:3001/api/videos/debug/${video.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            🔍 Debug Video
-          </a>
-        </div>
       </div>
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Delete Video?</h3>
-            <p className="text-gray-600 dark:text-gray-300 mb-4">
-              This will permanently delete "{video.title}" and all associated payment records. This action cannot be undone.
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="glass-card rounded-2xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-bold text-white mb-2">Delete Video?</h3>
+            <p className="text-gray-300 mb-6">
+              This will permanently delete &quot;{video.title}&quot; and all associated payment records. This action cannot be undone.
             </p>
             <div className="flex gap-3">
               <button
                 onClick={handleDelete}
                 disabled={deleting}
-                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium disabled:opacity-50 flex items-center justify-center gap-2 transition"
               >
                 {deleting ? (
                   <>
@@ -274,7 +272,7 @@ export default function WatchPage() {
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 py-3 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg font-medium"
+                className="flex-1 py-3 bg-[#2D2440] hover:bg-[#3D3458] text-white rounded-xl font-medium transition"
               >
                 Cancel
               </button>
@@ -283,5 +281,15 @@ export default function WatchPage() {
         </div>
       )}
     </main>
+  );
+}
+
+// Simple Lock Icon Component for empty state
+function LockIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#8656EF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
   );
 }
