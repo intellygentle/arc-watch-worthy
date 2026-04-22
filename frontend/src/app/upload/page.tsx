@@ -5,6 +5,7 @@
 import { useState, ChangeEvent, FormEvent } from 'react';
 import { useWallet } from '@/components/WalletAuth';
 import { videoAPI } from '@/lib/api';
+import { upload } from '@vercel/blob/client';  // ✅ Correct client-side import
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { Upload as UploadIcon, FileVideo, Loader2, DollarSign, Settings } from 'lucide-react';
@@ -38,7 +39,6 @@ export default function UploadPage() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -47,40 +47,31 @@ export default function UploadPage() {
     }
   };
 
-  // ✅ CORRECT client-side upload to Vercel Blob using fetch
+  // ✅ CORRECT client-side upload using Vercel Blob client
   const uploadDirectToBlob = async (file: File): Promise<string> => {
     console.log('📤 Getting upload token...');
     
-    // 1. Get upload token from backend
+    // 1. Get upload token and client payload from backend
     const tokenRes = await videoAPI.getUploadToken(file.name, file.type, eoaAddress!);
-    const { token, path, contentType, uploadUrl } = tokenRes.data.data;
+    const { clientPayload } = tokenRes.data.data;
     
-    console.log('✅ Token received, uploading directly to Vercel Blob...');
-    console.log('   Upload URL:', uploadUrl);
+    console.log('✅ Token received, uploading with Vercel Blob client...');
     
-    // 2. Upload using fetch with the correct headers
-    const response = await fetch(uploadUrl, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': contentType,
+    // 2. Use the client upload method with the payload from backend
+    const blob = await upload(file.name, file, {
+      access: 'public',
+      handleUploadUrl: (url: any) => {
+        console.log('📤 Uploading to:', url);
+        return url as any;
       },
-      body: file,
+      ...clientPayload, // Spread the client payload from backend
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Upload failed:', response.status, errorText);
-      throw new Error(`Upload failed: ${response.status}`);
-    }
-
-    const result = await response.json();
-    console.log('✅ Blob upload complete:', result.url);
-    return result.url;
+    console.log('✅ Blob upload complete:', blob.url);
+    return blob.url;
   };
 
   const processFile = (file: File) => {
-    // Check file size (5GB limit with Vercel Blob)
     if (file.size > MAX_FILE_SIZE) {
       toast.error(`File size must be less than 5GB`);
       return;
@@ -88,7 +79,6 @@ export default function UploadPage() {
     
     setVideoFile(file);
     
-    // Auto-extract metadata
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.onloadedmetadata = () => {
@@ -143,18 +133,15 @@ export default function UploadPage() {
     }
 
     setSubmitting(true);
-    setUploadProgress(0);
     const sizeMB = (videoFile.size / (1024 * 1024)).toFixed(2);
     const loadingToast = toast.loading(`Uploading directly to Vercel Blob (${sizeMB} MB)...`);
 
     try {
-      // ✅ Upload directly from browser to Vercel Blob
       const videoUrl = await uploadDirectToBlob(videoFile);
       
       toast.dismiss(loadingToast);
       toast.success('✅ Upload complete! Saving video...');
       
-      // Create video record
       const createToast = toast.loading('Saving video...');
       const res = await videoAPI.confirmUpload({
         videoUrl,
@@ -176,7 +163,6 @@ export default function UploadPage() {
       toast.error(err.response?.data?.error || err.message || 'Failed to publish video');
     } finally {
       setSubmitting(false);
-      setUploadProgress(0);
     }
   };
 
@@ -185,7 +171,6 @@ export default function UploadPage() {
     setForm(prev => ({ ...prev, [name]: value }));
   };
 
-  // UI Preview Logic
   const getChunkSeconds = (): number => {
     const value = parseFloat(form.chunkValue) || 5;
     return form.chunkUnit === 'minutes' ? Math.round(value * 60) : Math.round(value);
@@ -210,7 +195,6 @@ export default function UploadPage() {
         <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-sm border border-gray-200 dark:border-gray-700">
           <form onSubmit={handleSubmit} className="space-y-5">
             
-            {/* File Upload Area */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Select Video File
@@ -252,7 +236,6 @@ export default function UploadPage() {
               )}
             </div>
 
-            {/* Upload Progress */}
             {submitting && (
               <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
@@ -269,7 +252,6 @@ export default function UploadPage() {
               </div>
             )}
 
-            {/* Title */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
               <input 
@@ -283,7 +265,6 @@ export default function UploadPage() {
               />
             </div>
 
-            {/* Description */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description</label>
               <textarea 
@@ -298,7 +279,6 @@ export default function UploadPage() {
               />
             </div>
 
-            {/* Duration & Price */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Duration (seconds)</label>
@@ -333,7 +313,6 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Chunk Configuration */}
             <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg border border-gray-200 dark:border-gray-700">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
                 <Settings size={16} /> Chunk Configuration
@@ -374,7 +353,6 @@ export default function UploadPage() {
               </div>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={submitting || !eoaAddress || !videoFile || !isValidChunk}
@@ -392,15 +370,12 @@ export default function UploadPage() {
           </form>
         </div>
         
-        {/* Tips */}
         <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border border-blue-200 dark:border-blue-800">
           <h3 className="font-medium text-blue-900 dark:text-blue-200 mb-2">💡 Upload Tips</h3>
           <ul className="text-sm text-blue-800 dark:text-blue-300 space-y-1">
             <li>• Maximum file size: 5GB (Vercel Blob)</li>
             <li>• Minimum chunk: 5 seconds</li>
             <li>• Maximum chunk: 60 minutes (3600 seconds)</li>
-            <li>• Shorter chunks = more granular payments</li>
-            <li>• Longer chunks = fewer payment interruptions</li>
             <li>• First chunk is always free for preview</li>
           </ul>
         </div>

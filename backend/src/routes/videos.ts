@@ -11,6 +11,14 @@ import { Readable } from 'stream';
 import { signPaymentWithCircle } from '../services/nanopaymentsService';
 import { put, del } from '@vercel/blob';
 import multer from 'multer';
+import { createClient } from '@vercel/blob';
+
+// Initialize Vercel Blob client on the server
+const blobClient = createClient({
+  token: process.env.BLOB_READ_WRITE_TOKEN!,
+});
+
+
 
 const router = express.Router();
 
@@ -72,17 +80,21 @@ router.post('/upload-token', async (req: Request, res: Response) => {
     const safeFilename = filename.replace(/[^a-zA-Z0-9.-]/g, '_');
     const blobPath = `videos/${timestamp}-${safeFilename}`;
 
-    // ✅ Return the token, path, AND the full upload URL
+    // ✅ Create client payload for client-side upload
+    const clientPayload = await blobClient.generateClientUploadPayload({
+      path: blobPath,
+      access: 'public',
+      contentType: contentType || 'video/mp4',
+    });
+
     res.json({
       success: true,
       data: {
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-        path: blobPath,
-        contentType: contentType || 'video/mp4',
-        uploadUrl: `https://blob.vercel-storage.com/${blobPath}`,
+        clientPayload,
       }
     });
   } catch (err: any) {
+    console.error('Upload token error:', err);
     res.status(500).json({ error: err.message });
   }
 });
