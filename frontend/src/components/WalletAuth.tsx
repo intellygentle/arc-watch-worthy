@@ -9,13 +9,6 @@ import { authAPI, walletAPI } from '@/lib/api';
 
 type DeployState = 'checking' | 'not_deployed' | 'deploying' | 'deployed' | 'error' | 'needs_funding';
 
-interface WalletState {
-  isDeployed: boolean;
-  balance: string;
-  needsFunding: boolean;
-  explorerUrl?: string;
-}
-
 export function useWallet() {
   const [eoa, setEoa] = useState<string | null>(null);
   const [dcwAddress, setDcwAddress] = useState<string | null>(null);
@@ -37,7 +30,6 @@ export function useWallet() {
       setBalance(currentBalance);
       setExplorerUrl(url);
       
-      // Determine state based on deployment and balance
       if (isDeployed === true) {
         setDeployState('deployed');
       } else {
@@ -60,7 +52,7 @@ export function useWallet() {
     }
     
     let attempts = 0;
-    const maxAttempts = 30; // 60 seconds total
+    const maxAttempts = 30;
     
     pollingInterval.current = setInterval(async () => {
       attempts++;
@@ -103,7 +95,6 @@ export function useWallet() {
       }
     }, 2000);
     
-    // Cleanup after 70 seconds
     setTimeout(() => {
       if (pollingInterval.current) {
         clearInterval(pollingInterval.current);
@@ -144,7 +135,7 @@ export function useWallet() {
       const siweMessage = new SiweMessage({
         domain: window.location.host,
         address: mainEoa,
-        statement: 'Enable One-Click Viewing for ArcStream',
+        statement: 'Enable One-Click Viewing for Arc-Watch-Worthy',
         uri: window.location.origin,
         version: '1',
         chainId: 5042002,
@@ -261,26 +252,40 @@ export default function WalletAuth() {
     disconnect 
   } = useWallet();
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         {eoa ? (
-          <div className="flex items-center gap-3 bg-white dark:bg-gray-900 border p-2 px-4 rounded-xl shadow-sm">
+          <div className="flex items-center gap-2 sm:gap-3 glass-card p-2 sm:px-4 rounded-xl shadow-lg">
             <div className="flex flex-col">
-               <span className="text-[10px] font-bold text-blue-500">WALLET CONNECTED</span>
-               <span className="text-xs font-mono">{dcwAddress?.slice(0,6)}...{dcwAddress?.slice(-4)}</span>
+              <span className="text-[8px] sm:text-[10px] font-bold text-[#00C8B3] uppercase tracking-wider">
+                Wallet Connected
+              </span>
+              <span className="text-xs sm:text-sm font-mono text-white">
+                {dcwAddress?.slice(0, 6)}...{dcwAddress?.slice(-4)}
+              </span>
             </div>
-            <button onClick={disconnect} className="p-1 hover:text-red-500 transition-colors">
-              <LogOut size={16}/>
+            <button 
+              onClick={disconnect} 
+              className="p-1.5 sm:p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              title="Disconnect"
+            >
+              <LogOut size={isMobile ? 14 : 16} />
             </button>
           </div>
         ) : (
           <button 
             onClick={connectAndLink} 
             disabled={loading} 
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-xl flex items-center gap-2 transition-all disabled:opacity-50"
+            className="glow-button px-4 sm:px-6 py-2 sm:py-2.5 text-white rounded-xl flex items-center gap-2 transition-all disabled:opacity-50 text-sm sm:text-base"
           >
-            {loading ? <Loader2 className="animate-spin" size={18}/> : <Wallet size={18}/>}
+            {loading ? (
+              <Loader2 className="animate-spin" size={isMobile ? 16 : 18} />
+            ) : (
+              <Wallet size={isMobile ? 16 : 18} />
+            )}
             Connect Wallet
           </button>
         )}
@@ -288,37 +293,37 @@ export default function WalletAuth() {
 
       {/* Show deployment banner for various states */}
       {eoa && dcwAddress && deployState !== 'deployed' && deployState !== 'checking' && (
-        <div className={`p-4 rounded-xl border ${
+        <div className={`p-3 sm:p-4 rounded-xl border ${
           deployState === 'needs_funding' 
-            ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+            ? 'bg-amber-500/10 border-amber-500/30' 
             : deployState === 'deploying'
-            ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+            ? 'bg-blue-500/10 border-blue-500/30'
             : deployState === 'error'
-            ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
-            : 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+            ? 'bg-red-500/10 border-red-500/30'
+            : 'bg-amber-500/10 border-amber-500/30'
         }`}>
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-2 sm:gap-3">
             {deployState === 'deploying' ? (
-              <Loader2 className="text-blue-600 dark:text-blue-400 mt-0.5 animate-spin" size={20} />
+              <Loader2 className="text-blue-400 mt-0.5 animate-spin flex-shrink-0" size={isMobile ? 16 : 20} />
             ) : deployState === 'error' ? (
-              <AlertCircle className="text-red-600 dark:text-red-400 mt-0.5" size={20} />
+              <AlertCircle className="text-red-400 mt-0.5 flex-shrink-0" size={isMobile ? 16 : 20} />
             ) : (
-              <AlertCircle className="text-amber-600 dark:text-amber-400 mt-0.5" size={20} />
+              <AlertCircle className="text-amber-400 mt-0.5 flex-shrink-0" size={isMobile ? 16 : 20} />
             )}
-            <div className="flex-1">
-              <h4 className="font-semibold text-gray-900 dark:text-white text-sm mb-1">
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-white text-xs sm:text-sm mb-1">
                 {deployState === 'needs_funding' && '💰 Fund Your Wallet'}
                 {deployState === 'not_deployed' && '🚀 Deploy Your Wallet'}
                 {deployState === 'deploying' && '⏳ Deploying Wallet...'}
                 {deployState === 'error' && '❌ Deployment Error'}
               </h4>
               
-              <p className="text-xs text-gray-600 dark:text-gray-300 mb-3">
+              <p className="text-[10px] sm:text-xs text-gray-300 mb-3">
                 {deployState === 'needs_funding' && (
                   <>Your Circle wallet needs testnet USDC before it can be deployed. Current balance: {parseFloat(balance).toFixed(6)} USDC</>
                 )}
                 {deployState === 'not_deployed' && (
-                  <>Your wallet has {parseFloat(balance).toFixed(6)} USDC and is ready to be deployed on-chain.</>
+                  <>Your wallet has {parseFloat(balance).toFixed(6)} USDC and is ready to be deployed onchain.</>
                 )}
                 {deployState === 'deploying' && (
                   <>Deployment transaction in progress. This usually takes 30-60 seconds.</>
@@ -328,23 +333,23 @@ export default function WalletAuth() {
                 )}
               </p>
               
-              <div className="bg-white dark:bg-gray-800 rounded-lg p-3 mb-3">
+              <div className="bg-[#1F1A31] rounded-lg p-2 sm:p-3 mb-3">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Your DCW Address:</p>
+                  <p className="text-[10px] sm:text-xs text-gray-400">Your DCW Address:</p>
                   <button
                     onClick={refreshState}
-                    className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                    className="p-1 hover:bg-[#3D3458] rounded transition-colors"
                     title="Refresh status"
                   >
-                    <RefreshCw size={12} className="text-gray-500" />
+                    <RefreshCw size={10} className="text-gray-400" />
                   </button>
                 </div>
-                <code className="text-xs font-mono text-gray-900 dark:text-gray-100 break-all block mb-2">
-                  {dcwAddress}
+                <code className="text-[10px] sm:text-xs font-mono text-gray-200 break-all block mb-2">
+                  {isMobile ? `${dcwAddress.slice(0, 10)}...${dcwAddress.slice(-6)}` : dcwAddress}
                 </code>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Balance:</span>
-                  <span className="text-xs font-mono font-medium">
+                  <span className="text-[10px] sm:text-xs text-gray-400">Balance:</span>
+                  <span className="text-[10px] sm:text-xs font-mono font-medium text-[#00C8B3]">
                     {parseFloat(balance).toFixed(6)} USDC
                   </span>
                 </div>
@@ -353,28 +358,28 @@ export default function WalletAuth() {
                     href={explorerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                    className="mt-2 text-[10px] sm:text-xs text-[#8656EF] hover:underline flex items-center gap-1"
                   >
                     View on ArcScan <ExternalLink size={10} />
                   </a>
                 )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col xs:flex-row gap-2">
                 {deployState === 'needs_funding' && (
                   <>
                     <a 
                       href="https://faucet.circle.com" 
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 text-center px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition flex items-center justify-center gap-1"
+                      className="flex-1 text-center px-3 py-2 bg-[#8656EF] hover:bg-[#7a4ee0] text-white rounded-lg text-xs font-medium transition flex items-center justify-center gap-1"
                     >
                       Get Testnet USDC
-                      <ExternalLink size={12} />
+                      <ExternalLink size={10} />
                     </a>
                     <button
                       onClick={refreshState}
-                      className="px-3 py-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg text-xs font-medium transition"
+                      className="px-3 py-2 bg-[#2D2440] hover:bg-[#3D3458] text-white rounded-lg text-xs font-medium transition"
                     >
                       Check Balance
                     </button>
@@ -385,7 +390,7 @@ export default function WalletAuth() {
                   <button
                     onClick={deployWallet}
                     disabled={loading}
-                    className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition disabled:opacity-50 flex items-center justify-center gap-1"
+                    className="flex-1 px-3 py-2 bg-[#22C55E] hover:bg-[#1ea34d] text-white rounded-lg text-xs font-medium transition disabled:opacity-50 flex items-center justify-center gap-1"
                   >
                     {loading ? (
                       <>
@@ -402,7 +407,7 @@ export default function WalletAuth() {
                 )}
                 
                 {deployState === 'deploying' && (
-                  <div className="flex-1 text-center px-3 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-xs font-medium">
+                  <div className="flex-1 text-center px-3 py-2 bg-blue-500/20 text-blue-300 rounded-lg text-xs font-medium">
                     Deployment in progress...
                   </div>
                 )}
@@ -424,18 +429,18 @@ export default function WalletAuth() {
 
       {/* Success state */}
       {eoa && deployState === 'deployed' && (
-        <div className="flex items-center gap-2 text-green-600 dark:text-green-400 text-xs bg-green-50 dark:bg-green-900/20 p-2 rounded-lg">
-          <CheckCircle size={14} />
-          <span className="flex-1">Wallet deployed & ready for seamless payments</span>
-          <span className="font-mono">{parseFloat(balance).toFixed(4)} USDC</span>
-          {explorerUrl && (
+        <div className="flex flex-wrap items-center gap-2 text-[#22C55E] text-[10px] sm:text-xs bg-[#22C55E]/10 p-2 sm:p-3 rounded-lg border border-[#22C55E]/20">
+          <CheckCircle size={isMobile ? 12 : 14} className="flex-shrink-0" />
+          <span className="flex-1 text-white">Wallet deployed & ready for seamless payments</span>
+          <span className="font-mono text-[#00C8B3]">{parseFloat(balance).toFixed(4)} USDC</span>
+          {explorerUrl && !isMobile && (
             <a
               href={explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+              className="text-[#8656EF] hover:underline flex items-center gap-1"
             >
-              <ExternalLink size={12} />
+              <ExternalLink size={10} />
             </a>
           )}
         </div>
