@@ -18,7 +18,7 @@ interface VideoPlayerProps {
   creatorDcw: string;
   viewerWallet: string | null;
   viewerDcw: string | null;
-  onPaymentSuccess?: (chunkIndex: number, amount: string) => void;
+  onPaymentSuccess?: (chunkIndex: number, amount: string, txHash?: string) => void;  // ✅ Added txHash
   onPaymentError?: (error: string) => void;
 }
 
@@ -102,6 +102,9 @@ export default function VideoPlayer({
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
   const [isAutoPaying, setIsAutoPaying] = useState(false);
   const [autoPayProcessedForChunk, setAutoPayProcessedForChunk] = useState<Set<number>>(new Set());
+  
+  // ✅ Store last transaction hash
+  const [lastTxHash, setLastTxHash] = useState<string | undefined>();
 
   const { chunkSeconds, totalChunks } = calculateVideoChunks(durationSeconds, chunkDurationSeconds);
   const streamUrl = `${process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'}/api/videos/${videoId}/stream`;
@@ -259,7 +262,7 @@ export default function VideoPlayer({
     return true;
   }, [unlockedChunks]);
 
-  // Pay for a specific chunk
+  // ✅ Pay for a specific chunk - Now captures and passes txHash
   const payForChunk = useCallback(async (chunkIndex: number, isAuto: boolean = false): Promise<boolean> => {
     if (unlockedChunks.has(chunkIndex)) {
       console.log(`✅ Chunk ${chunkIndex} already paid`);
@@ -274,12 +277,19 @@ export default function VideoPlayer({
     
     try {
       let paymentDetails: PaymentDetails | null = null;
+      let txHash: string | undefined;
       
       try {
-        await videoAPI.requestChunkAccess(videoId, chunkIndex);
+        // First attempt - might already be paid
+        const response = await videoAPI.requestChunkAccess(videoId, chunkIndex);
         setUnlockedChunks(prev => new Set(prev).add(chunkIndex));
         setLastPaidChunk(Math.max(lastPaidChunk, chunkIndex));
-        onPaymentSuccess?.(chunkIndex, formatUSDC(pricePerChunk));
+        
+        // Try to extract txHash from response if available
+        txHash = response.data?.payment?.txHash || response.data?.txHash;
+        setLastTxHash(txHash);
+        
+        onPaymentSuccess?.(chunkIndex, formatUSDC(pricePerChunk), txHash);
         return true;
       } catch (err: any) {
         if (err.response?.status === 402) {
@@ -287,6 +297,11 @@ export default function VideoPlayer({
         } else if (err.response?.status === 200) {
           setUnlockedChunks(prev => new Set(prev).add(chunkIndex));
           setLastPaidChunk(Math.max(lastPaidChunk, chunkIndex));
+          
+          txHash = err.response?.data?.payment?.txHash || err.response?.data?.txHash;
+          setLastTxHash(txHash);
+          
+          onPaymentSuccess?.(chunkIndex, formatUSDC(pricePerChunk), txHash);
           return true;
         } else {
           throw err;
@@ -311,11 +326,16 @@ export default function VideoPlayer({
         price: paymentDetails.price,
       });
       
-      await videoAPI.requestChunkAccess(videoId, chunkIndex, signedPayment);
+      const submitResponse = await videoAPI.requestChunkAccess(videoId, chunkIndex, signedPayment);
       
       setUnlockedChunks(prev => new Set(prev).add(chunkIndex));
       setLastPaidChunk(Math.max(lastPaidChunk, chunkIndex));
-      onPaymentSuccess?.(chunkIndex, formatUSDC(pricePerChunk));
+      
+      // ✅ Extract txHash from response
+      txHash = submitResponse.data?.payment?.txHash || submitResponse.data?.txHash;
+      setLastTxHash(txHash);
+      
+      onPaymentSuccess?.(chunkIndex, formatUSDC(pricePerChunk), txHash);
       
       return true;
       

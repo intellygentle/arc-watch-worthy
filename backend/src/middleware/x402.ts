@@ -19,7 +19,7 @@ export function createX402Middleware(options: X402Options) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const authHeader = req.headers['x-payment-authorization'] as string | undefined;
     
-    // First, check if user has already paid for this chunk
+    // Check if user has already paid for this chunk
     const authUserHeader = req.headers['authorization'];
     if (authUserHeader?.startsWith('Bearer ')) {
       const eoaAddress = authUserHeader.slice(7);
@@ -48,6 +48,7 @@ export function createX402Middleware(options: X402Options) {
               recipient: options.creatorDcw,
               payer: eoaAddress,
               alreadyPaid: true,
+              txHash: existingPayment.txHash,  // ✅ Include txHash for already paid chunks
             };
             return next();
           }
@@ -138,7 +139,7 @@ export function createX402Middleware(options: X402Options) {
 
     // 5. Process payment
     try {
-      await processPayment({
+      const paymentResult = await processPayment({
         videoId: options.videoId,
         chunkIndex: options.chunkIndex,
         priceUSD: options.priceUSD,
@@ -159,6 +160,7 @@ export function createX402Middleware(options: X402Options) {
         payerDcw: verification.dcwAddress,
         nonce,
         timestamp: new Date().toISOString(),
+        txHash: paymentResult.txHash,  // ✅ Pass txHash from payment result
       };
 
       next();

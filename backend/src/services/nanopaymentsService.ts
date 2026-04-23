@@ -92,7 +92,7 @@ export async function verifyPaymentSignature(
   try {
     const parts = authHeader.split(':');
     if (parts.length < 2) return { valid: false, error: 'Invalid Header Format' };
-    const [signature, providedAddress] = parts; // ✅ Extract provided address
+    const [signature, providedAddress] = parts;
     
     const resource = context 
       ? `video:${context.videoId}:chunk:${context.chunkIndex}`
@@ -100,7 +100,6 @@ export async function verifyPaymentSignature(
     
     const message = `x402:${ARC_CHAIN_ID}:${resource}:${expectedPrice}:${nonce}`;
     
-    // Recover signer from signature
     const recoveredSigner = getAddress(await recoverMessageAddress({
       message,
       signature: signature as `0x${string}`,
@@ -112,7 +111,6 @@ export async function verifyPaymentSignature(
     console.log('   Provided address:', providedAddress);
     console.log('   Recovered signer:', recoveredSigner);
 
-    // ✅ Try multiple ways to find the user
     let user = await prisma.user.findFirst({
       where: { 
         OR: [
@@ -123,7 +121,6 @@ export async function verifyPaymentSignature(
       }
     });
 
-    // If still not found, try case-insensitive search
     if (!user) {
       console.log('⚠️ Direct match failed, trying case-insensitive search...');
       const allUsers = await prisma.user.findMany();
@@ -181,7 +178,8 @@ export async function processPayment(request: NanopaymentRequest) {
       return { 
         success: true, 
         alreadyPaid: true,
-        message: 'Chunk already paid for'
+        message: 'Chunk already paid for',
+        txHash: existingPayment.txHash || undefined,  // ✅ Return existing txHash
       };
     }
 
@@ -193,7 +191,6 @@ export async function processPayment(request: NanopaymentRequest) {
     console.log(`   From: ${request.dcwWalletId}`);
     console.log(`   To: ${request.creatorWallet}`);
     
-    // Use type assertion for blockchain parameter
     const response = await client.createContractExecutionTransaction({
       walletId: request.dcwWalletId,
       blockchain: 'ARC-TESTNET',
@@ -281,7 +278,11 @@ export async function processPayment(request: NanopaymentRequest) {
     }
 
     console.log(`💰 [x402] Success: ${request.priceUSD} USDC moved to ${request.creatorWallet}`);
-    return { success: true, transferId, txHash };
+    return { 
+      success: true, 
+      transferId, 
+      txHash: txHash || undefined,  // ✅ Return txHash
+    };
     
   } catch (err: any) {
     console.error('Payment Processing Error:', err.message);

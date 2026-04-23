@@ -502,6 +502,9 @@ router.get('/:id/paid-chunks', async (req: Request, res: Response) => {
 });
 
 // 9. POST /api/videos/:id/stream/:chunk - Protected x402 Chunk Access
+// backend/src/routes/videos.ts - Only the stream endpoint needs updating
+
+// 9. POST /api/videos/:id/stream/:chunk - Protected x402 Chunk Access
 router.post('/:id/stream/:chunk', 
   async (req: Request, res: Response, next: NextFunction) => {
     const videoId = getRouteParam(req.params.id) || '';
@@ -518,7 +521,15 @@ router.post('/:id/stream/:chunk',
     })(req, res, next);
   },
   (req: Request, res: Response) => {
-    res.json({ success: true, unlocked: true, message: 'Chunk unlocked' });
+    // ✅ Access the payment from req.x402Payment (set by middleware)
+    const x402Payment = (req as any).x402Payment;
+    
+    res.json({ 
+      success: true, 
+      unlocked: true, 
+      message: 'Chunk unlocked',
+      txHash: x402Payment?.txHash,  // ✅ Get txHash from x402Payment
+    });
   }
 );
 

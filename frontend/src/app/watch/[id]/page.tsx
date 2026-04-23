@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Share2, Heart, MessageCircle, Loader2, AlertCircle, Trash2, Clock, DollarSign, Layers, Info } from 'lucide-react';
+import { ArrowLeft, Share2, Heart, MessageCircle, Loader2, AlertCircle, Trash2, Clock, DollarSign, Layers, Info, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { videoAPI } from '@/lib/api';
 import { useWallet } from '@/components/WalletAuth';
@@ -26,6 +26,13 @@ interface Video {
   createdAt: string;
 }
 
+interface PaymentLogEntry {
+  chunk: number;
+  amount: string;
+  timestamp: string;
+  txHash?: string;
+}
+
 export default function WatchPage() {
   const params = useParams();
   const router = useRouter();
@@ -35,7 +42,7 @@ export default function WatchPage() {
   const [video, setVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [paymentLog, setPaymentLog] = useState<Array<{ chunk: number; amount: string; timestamp: string }>>([]);
+  const [paymentLog, setPaymentLog] = useState<PaymentLogEntry[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
@@ -83,13 +90,14 @@ export default function WatchPage() {
     if (videoId) fetchVideo();
   }, [videoId, router]);
   
-  const handlePaymentSuccess = (chunkIndex: number, amount: string) => {
+  const handlePaymentSuccess = (chunkIndex: number, amount: string, txHash?: string) => {
     setPaymentLog(prev => [...prev, {
       chunk: chunkIndex,
       amount,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      txHash,
     }]);
-    console.log(`💸 Nanopayment: Chunk ${chunkIndex} - ${amount} USDC to ${video?.creatorDcw}`);
+    console.log(`💸 Nanopayment: Chunk ${chunkIndex} - ${amount} USDC to ${video?.creatorDcw}${txHash ? ` (TX: ${txHash})` : ''}`);
   };
   
   const handlePaymentError = (errorMsg: string) => {
@@ -224,12 +232,26 @@ export default function WatchPage() {
               <DollarSign size={18} className="text-[#00C8B3]" />
               Payment History
             </h3>
-            <div className="space-y-2 max-h-40 overflow-y-auto">
+            <div className="space-y-2 max-h-60 overflow-y-auto">
               {paymentLog.map((payment, idx) => (
                 <div key={idx} className="flex items-center justify-between text-sm p-3 bg-[#2D2440] rounded-lg">
-                  <span className="text-gray-300">
-                    Chunk {payment.chunk + 1} <span className="text-gray-500">({formatDuration(chunkSeconds)})</span>
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-gray-300">
+                      Chunk {payment.chunk + 1} <span className="text-gray-500">({formatDuration(chunkSeconds)})</span>
+                    </span>
+                    {payment.txHash && (
+                      <a
+                        href={`https://testnet.arcscan.app/tx/${payment.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] sm:text-xs text-[#8656EF] hover:text-[#00C8B3] flex items-center gap-1 transition-colors"
+                        title="View on ArcScan"
+                      >
+                        <span className="font-mono">{payment.txHash.slice(0, 6)}...{payment.txHash.slice(-4)}</span>
+                        <ExternalLink size={10} />
+                      </a>
+                    )}
+                  </div>
                   <span className="font-mono font-medium text-[#22C55E]">
                     -{payment.amount} USDC
                   </span>
