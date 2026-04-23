@@ -22,6 +22,8 @@ export const metadata: Metadata = {
   description: "Web3 video streaming with granular nanopayments. Unlock content in 5-second chunks. Your money only follows content that earns it.",
   keywords: ["web3", "video streaming", "nanopayments", "circle", "arc testnet", "pay-per-view"],
   authors: [{ name: "Arc-Watch-Worthy" }],
+  icons: {
+    icon: '/favicon.ico'},
   openGraph: {
     title: "Arc-Watch-Worthy",
     description: "Pay only for content that proves worthy. Granular nanopayments for video streaming.",
